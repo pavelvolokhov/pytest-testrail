@@ -51,13 +51,14 @@ warnings.simplefilter(action='once', category=DeprecatedTestDecorator, lineno=0)
 
 
 class TestRail_new:
-    def public(self, a=None):
+    def publish_results(self, a=None, testrail_data: TestRailModel = None, results: list = None):
         print(f"!!!! PUBLISH RESULTS !!!! + {a}")
 
 
 class NodeDown(TestRail_new):
 
     def __init__(self):
+        self.testraul_data = None
         self.results = None
 
     def pytest_testnodedown(self, node, error):
@@ -69,7 +70,8 @@ class NodeDown(TestRail_new):
             return
         if 'workeroutput' in dir(node):
             self.results = node.workeroutput['RESULTS']
-            self.public("pytest_testnodedown")
+            self.testraul_data = node.workeroutput['TESTRAIL_DATA']
+            self.publish_results("pytest_testnodedown", testrail_data=self.testraul_data)
 
 
 class pytestrail(object):
@@ -136,6 +138,7 @@ def is_xdist_worker(config):
     node or not running xdist at all.
     """
     return hasattr(config, 'workerinput')
+
 
 def clean_test_ids(test_ids):
     """
@@ -287,17 +290,20 @@ class PyTestRailPlugin(TestRail_new):
         yield
         if session.config.pluginmanager.get_plugin("xdist"):
             if is_xdist_worker(session):
-                session.config.workeroutput['RESULTS'] = self.results
                 self.is_use_xdist = True
+                session.config.workeroutput['RESULTS'] = self.results
+                session.config.workeroutput['TESTRAIL_DATA'] = self.testrail_data
+
             if not self.is_use_xdist and not session.config.getoption("numprocesses"):
-                self.public(session.config.getoption("numprocesses"))
+                self.publish_results(session.config.getoption("numprocesses"), testrail_data=self.testrail_data,
+                                     results=self.results)
                 # self.publish_results()
         else:
             self.publish_results()
 
     def pytest_configure(self, config):
         if config.pluginmanager.hasplugin("xdist"):
-            from xdist import is_xdist_worker
+            # from xdist import is_xdist_worker
             config.pluginmanager.register(NodeDown())
 
     def publish_results(self):
