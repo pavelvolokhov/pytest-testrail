@@ -12,6 +12,7 @@ from _pytest.config import Config
 
 # Reference: http://docs.gurock.com/testrail-api2/reference-statuses
 from pytest_testrail.TestrailModel import TestRailModel
+from testrail_api import APIClient
 
 TESTRAIL_TEST_STATUS = {
     "passed": 1,
@@ -51,8 +52,61 @@ warnings.simplefilter(action='once', category=DeprecatedTestDecorator, lineno=0)
 
 
 class TestRail_new:
+    def __init__(self, testrail_data):
+        self.testrail_data = testrail_data
+
+    def update_test_run(self, testrun_id: int, tr_keys: list) -> None:
+        """ Updates an existing test run
+         :param testrun_id:
+         :param tr_keys: collected testrail ids.
+         """
+        data = {
+            # 'run_id': testrun_id,
+            # 'name': testrun_name,
+            # 'description': description,
+            # 'assignedto_id': assign_user_id,
+            # 'include_all': include_all,
+            'case_ids': tr_keys,
+            # 'milestone_id': milestone_id
+        }
+        response = self.testrail_data.client.send_post(
+            UPDATE_RUN_URL.format(testrun_id),
+            data,
+            cert_check=self.testrail_data.cert_check
+        )
+        error = self.testrail_data.client.get_error(response)
+        if error:
+            print('[{}] Failed to update testrun: "{}"'.format(TESTRAIL_PREFIX, error))
+        else:
+            # self.testrun_id = response['id']
+            print('[{}] Testrun updated with name "{}" and ID={}'.format(TESTRAIL_PREFIX,
+                                                                         self.testrail_data.testrun_name,
+                                                                         testrun_id))
+
     def publish_results(self, a=None, testrail_data: TestRailModel = None, results: list = None):
         print(f"!!!! PUBLISH RESULTS !!!! + {a}")
+        print('[{}] Start publishing'.format(TESTRAIL_PREFIX))
+
+        if results:
+            tests_list = list(set([str(result['case_id']) for result in results]))
+            print('[{}] Testcases to publish: {}'.format(TESTRAIL_PREFIX, ', '.join(tests_list)))
+
+            if testrail_data.testrun_id:
+                self.update_test_run(testrail_data.testrun_id, tests_list)
+            #     self.add_results(self.testrun_id)
+            # elif self.testrail_data.testplan_id:
+            #     testruns = self.get_available_testruns(self.testrail_data.testplan_id)
+            #     print('[{}] Testruns to update: {}'.format(TESTRAIL_PREFIX, ', '.join([str(elt) for elt in testruns])))
+            #     for testrun_id in testruns:
+            #         self.add_results(testrun_id)
+            # else:
+            #     print('[{}] No data published'.format(TESTRAIL_PREFIX))
+            #
+            # if self.testrail_data.close_on_complete and self.testrun_id:
+            #     self.close_test_run(self.testrail_data.testrun_id)
+            # elif self.testrail_data.close_on_complete and self.testrail_data.testplan_id:
+            #     self.close_test_plan(self.testrail_data.testplan_id)
+        print('[{}] End publishing'.format(TESTRAIL_PREFIX))
 
 
 class NodeDown(TestRail_new):
@@ -177,12 +231,14 @@ def get_testrail_keys(items):
 
 
 class PyTestRailPlugin(TestRail_new):
+
     def __init__(self, client, assign_user_id, project_id, suite_id, include_all, cert_check, tr_name,
                  tr_description='', run_id=0, plan_id=0, version='', close_on_complete=False,
                  publish_blocked=True, skip_missing=False, milestone_id=None, custom_comment=None, config=None):
+
         self.testrail_data = TestRailModel(assign_user_id=assign_user_id,
                                            cert_check=cert_check,
-                                           # client=client,
+                                           client=client,
                                            project_id=project_id,
                                            suite_id=suite_id,
                                            include_all=include_all,
@@ -199,6 +255,7 @@ class PyTestRailPlugin(TestRail_new):
                                            test_run_flag=False,
                                            tr_keys=[],
                                            )
+        super().__init__(testrail_data=self.testrail_data)
         self.client = client
         self.results = []
         self.config = config
@@ -306,28 +363,8 @@ class PyTestRailPlugin(TestRail_new):
             # from xdist import is_xdist_worker
             config.pluginmanager.register(NodeDown())
 
-    def publish_results(self):
-        print('[{}] Start publishing'.format(TESTRAIL_PREFIX))
-        if self.results:
-            tests_list = list(set([str(result['case_id']) for result in self.results]))
-            print('[{}] Testcases to publish: {}'.format(TESTRAIL_PREFIX, ', '.join(tests_list)))
+    # def publish_results(self):
 
-            if self.testrun_id:
-                self.update_test_run(self.testrun_id, tests_list)
-                self.add_results(self.testrun_id)
-            elif self.testrail_data.testplan_id:
-                testruns = self.get_available_testruns(self.testrail_data.testplan_id)
-                print('[{}] Testruns to update: {}'.format(TESTRAIL_PREFIX, ', '.join([str(elt) for elt in testruns])))
-                for testrun_id in testruns:
-                    self.add_results(testrun_id)
-            else:
-                print('[{}] No data published'.format(TESTRAIL_PREFIX))
-
-            if self.testrail_data.close_on_complete and self.testrun_id:
-                self.close_test_run(self.testrail_data.testrun_id)
-            elif self.testrail_data.close_on_complete and self.testrail_data.testplan_id:
-                self.close_test_plan(self.testrail_data.testplan_id)
-        print('[{}] End publishing'.format(TESTRAIL_PREFIX))
 
     def add_result(self, test_ids, status, comment='', defects=None, duration=0, test_parametrize=None):
         """
@@ -457,33 +494,33 @@ class PyTestRailPlugin(TestRail_new):
                                                                              testrun_name,
                                                                              self.testrun_id))
 
-    def update_test_run(self, testrun_id: int, tr_keys: list) -> None:
-        """ Updates an existing test run
-         :param testrun_id:
-         :param tr_keys: collected testrail ids.
-         """
-        data = {
-            # 'run_id': testrun_id,
-            # 'name': testrun_name,
-            # 'description': description,
-            # 'assignedto_id': assign_user_id,
-            # 'include_all': include_all,
-            'case_ids': tr_keys,
-            # 'milestone_id': milestone_id
-        }
-        response = self.client.send_post(
-            UPDATE_RUN_URL.format(testrun_id),
-            data,
-            cert_check=self.testrail_data.cert_check
-        )
-        error = self.client.get_error(response)
-        if error:
-            print('[{}] Failed to update testrun: "{}"'.format(TESTRAIL_PREFIX, error))
-        else:
-            # self.testrun_id = response['id']
-            print('[{}] Testrun updated with name "{}" and ID={}'.format(TESTRAIL_PREFIX,
-                                                                         self.testrail_data.testrun_name,
-                                                                         self.testrail_data.testrun_id))
+    # def update_test_run(self, testrun_id: int, tr_keys: list) -> None:
+    #     """ Updates an existing test run
+    #      :param testrun_id:
+    #      :param tr_keys: collected testrail ids.
+    #      """
+    #     data = {
+    #         # 'run_id': testrun_id,
+    #         # 'name': testrun_name,
+    #         # 'description': description,
+    #         # 'assignedto_id': assign_user_id,
+    #         # 'include_all': include_all,
+    #         'case_ids': tr_keys,
+    #         # 'milestone_id': milestone_id
+    #     }
+    #     response = self.client.send_post(
+    #         UPDATE_RUN_URL.format(testrun_id),
+    #         data,
+    #         cert_check=self.testrail_data.cert_check
+    #     )
+    #     error = self.client.get_error(response)
+    #     if error:
+    #         print('[{}] Failed to update testrun: "{}"'.format(TESTRAIL_PREFIX, error))
+    #     else:
+    #         # self.testrun_id = response['id']
+    #         print('[{}] Testrun updated with name "{}" and ID={}'.format(TESTRAIL_PREFIX,
+    #                                                                      self.testrail_data.testrun_name,
+    #                                                                      self.testrail_data.testrun_id))
 
     def close_test_run(self, testrun_id):
         """
