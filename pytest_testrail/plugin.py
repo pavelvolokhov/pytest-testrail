@@ -11,7 +11,7 @@ from execnet.gateway_base import unicode
 from _pytest.config import Config
 
 # Reference: http://docs.gurock.com/testrail-api2/reference-statuses
-from pytest_testrail.models.TestrailModel import TestRailModel
+from pytest_testrail.TestrailModel import TestRailModel
 
 TESTRAIL_TEST_STATUS = {
     "passed": 1,
