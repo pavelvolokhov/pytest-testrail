@@ -1,13 +1,11 @@
 from dataclasses import dataclass
 
-from testrail_api import APIClient
-
 
 @dataclass
 class TestRailModel:
     assign_user_id: int
     cert_check: bool = False
-    client: APIClient = None
+    client: any = None
     project_id: int = None
     # results: list = None
     suite_id: int = None
