@@ -6,7 +6,7 @@ import re
 import warnings
 
 from dataclasses import asdict
-from .testrail_api_new import APIClient
+from .testrail_api import APIClient
 # from .content import testrail_context
 
 # from execnet.gateway_base import unicode
@@ -75,14 +75,14 @@ class TestRail_new:
                 testruns = self.get_available_testruns(self.testrail_data.testplan_id)
                 print('[{}] Testruns to update: {}'.format(TESTRAIL_PREFIX, ', '.join([str(elt) for elt in testruns])))
                 for testrun_id in testruns:
-                    self.add_results(testrun_id)
+                    self.add_results(testrun_id, results)
             else:
                 print('[{}] No data published'.format(TESTRAIL_PREFIX))
 
             if self.testrail_data.close_on_complete and self.testrail_data.testrun_id:
                 self.close_test_run(self.testrail_data.testrun_id)
             elif self.testrail_data.close_on_complete and self.testrail_data.testplan_id:
-                self.close_test_close_test_planplan(self.testrail_data.testplan_id)
+                self.close_test_plan(self.testrail_data.testplan_id)
         print('[{}] End publishing'.format(TESTRAIL_PREFIX))
 
     def update_test_run(self, testrun_id: int, tr_keys: list) -> None:
@@ -147,7 +147,6 @@ class TestRail_new:
             'defects': str(clean_test_defects(defects)).replace('[', '').replace(']', '').replace("'", '') if defects else None,
             'test_parametrize': test_parametrize
         }
-        print()
         return data
 
 
@@ -243,15 +242,14 @@ class TestRail_new:
             cert_check=self.testrail_data.cert_check
         )
         error = self.client.get_error(response)
-        if False:
+        if error:
             print('[{}] Failed to create testrun: "{}"'.format(TESTRAIL_PREFIX, error))
             return 0
         else:
-            print("Create new testrun")
-            return response['id'] #
             print('[{}] New testrun created with name "{}" and ID={}'.format(TESTRAIL_PREFIX,
                                                                              testrun_name,
                                                                              response['id']))
+            return response['id']
 
     def close_test_run(self, testrun_id) -> None:
         """
