@@ -151,7 +151,10 @@ def pytest_configure(config):
                 publish_blocked=config.getoption('--tr-dont-publish-blocked'),
                 skip_missing=config.getoption('--tr-skip-missing'),
                 milestone_id=config_manager.getoption('tr-milestone-id', 'milestone_id', 'TESTRUN'),
-                custom_comment=config_manager.getoption('tc-custom-comment', 'custom_comment', 'TESTCASE')
+                custom_comment=config_manager.getoption('tc-custom-comment', 'custom_comment', 'TESTCASE'),
+                user_email=config_manager.getoption('tr-email', 'email', 'API'),
+                user_password=config_manager.getoption('tr-password', 'password', 'API'),
+                tr_url=config_manager.getoption('tr-url', 'url', 'API')
             ),
             # Name of plugin instance (allow to be used by other plugins)
             name="pytest-testrail-instance"

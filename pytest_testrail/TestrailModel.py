@@ -1,13 +1,17 @@
 from dataclasses import dataclass
+from dataclasses import asdict
 
 
 @dataclass
 class TestRailModel:
     assign_user_id: int
+    user_email: str = None
+    user_password: str = None
+    tr_url: str = None
     cert_check: bool = False
     client: any = None
     project_id: int = None
-    # results: list = None
+    results: list = None
     suite_id: int = None
     include_all: bool = None
     testrun_name: str = None
