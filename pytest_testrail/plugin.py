@@ -6,7 +6,6 @@ import pytest
 import re
 import warnings
 from pytest_testrail.TestrailModel import TestRailModel
-from pytest_testrail.testrail_api import APIClient
 
 # Reference: http://docs.gurock.com/testrail-api2/reference-statuses
 TESTRAIL_TEST_STATUS = {
