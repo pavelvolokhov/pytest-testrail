@@ -242,8 +242,7 @@ class TestrailActions:
         if error:
             print('[{}] Info: Testcases not published for following reason: "{}"'.format(TESTRAIL_PREFIX, error))
 
-    def publish_results(self, a=None, testrail_data: TestRailModel = None, results: list = None):
-        print('!!!! PUBLISH RESULTS !!!! => {}'.format(a))
+    def publish_results(self, testrail_data: TestRailModel = None, results: list = None):
         print('[{}] Start publishing'.format(TESTRAIL_PREFIX))
 
         if results:
@@ -251,13 +250,11 @@ class TestrailActions:
             print('[{}] Testcases to publish: {}'.format(TESTRAIL_PREFIX, ', '.join(tests_list)))
 
             if testrail_data.testrun_id:
-                # self.update_test_run(testrail_data.testrun_id, tests_list)
                 self._add_results(self.testrail_data.testrun_id, results)
             elif self.testrail_data.testplan_id:
                 testruns = self.get_available_testruns(self.testrail_data.testplan_id)
                 print('[{}] Testruns to update: {}'.format(TESTRAIL_PREFIX, ', '.join([str(elt) for elt in testruns])))
                 for testrun_id in testruns:
-                    # self.update_test_run(testrail_data.testrun_id, tests_list)
                     self._add_results(testrun_id, results)
             else:
                 print('[{}] No data published'.format(TESTRAIL_PREFIX))
@@ -457,7 +454,6 @@ class PyTestRailPlugin(TestrailActions):
                                            )
         super().__init__(testrail_data=self.testrail_data)
         self.is_use_xdist = False
-        # self.results = []
 
     # pytest hooks
     def pytest_report_header(self, config, startdir):
@@ -543,15 +539,11 @@ class PyTestRailPlugin(TestrailActions):
         if session.config.pluginmanager.get_plugin("xdist"):
             if is_xdist_worker(config=session.config):
                 self.is_use_xdist = True
-                self.publish_results('xdist multi mode + numprocesses => {}'.format(session.config.getoption('numprocesses')),
-                                     testrail_data=self.testrail_data,
-                                     results=self.testrail_data.results)
+                self.publish_results(testrail_data=self.testrail_data, results=self.testrail_data.results)
             if not self.is_use_xdist and not session.config.getoption("numprocesses"):
-                self.publish_results('xdist single mode + numprocesses => {}'.format(session.config.getoption('numprocesses')),
-                                     testrail_data=self.testrail_data,
-                                     results=self.testrail_data.results)
+                self.publish_results(testrail_data=self.testrail_data, results=self.testrail_data.results)
         else:
-            self.publish_results("Without xdist plugin", testrail_data=self.testrail_data, results=self.testrail_data.results)
+            self.publish_results(testrail_data=self.testrail_data, results=self.testrail_data.results)
 
     def pytest_configure(self, config):
         if config.pluginmanager.hasplugin("xdist"):
@@ -562,7 +554,6 @@ class NodeAction(TestrailActions):
 
     def __init__(self, testrail_data):
         self.testrail_data = testrail_data
-        # self.results = None
         super().__init__(testrail_data=self.testrail_data)
 
     def pytest_configure_node(self, node):  # type: ignore
