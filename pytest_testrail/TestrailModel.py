@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from dataclasses import asdict
 
 
 @dataclass
@@ -25,4 +24,4 @@ class TestRailModel:
     milestone_id: int = None
     custom_comment: str = None
     test_run_flag: bool = False
-    tr_keys: list = list
+    tr_keys: list = None

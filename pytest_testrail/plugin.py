@@ -151,9 +151,6 @@ def get_testrail_keys(items):
 class TestrailActions:
     def __init__(self, testrail_data: TestRailModel):
         self.testrail_data = testrail_data
-        self.client = APIClient(base_url=testrail_data.tr_url,
-                                user=testrail_data.user_email,
-                                password=testrail_data.user_password)
 
     def add_result(self, test_id, status, comment='', defects=None, duration=0, test_parametrize=None):
         """
@@ -177,7 +174,7 @@ class TestrailActions:
         }
         return data
 
-    def add_results(self, testrun_id, results):
+    def _add_results(self, testrun_id, results):
         """
         Add results one by one to improve errors handling.
         :param testrun_id: Id of the testrun to feed
@@ -237,12 +234,12 @@ class TestrailActions:
                 entry['elapsed'] = str(duration) + 's'
             data['results'].append(entry)
 
-        response = self.client.send_post(
+        response = self.testrail_data.client.send_post(
             ADD_RESULTS_URL.format(testrun_id),
             data,
             cert_check=self.testrail_data.cert_check
         )
-        error = self.client.get_error(response)
+        error = self.testrail_data.client.get_error(response)
         if error:
             print('[{}] Info: Testcases not published for following reason: "{}"'.format(TESTRAIL_PREFIX, error))
 
@@ -256,13 +253,13 @@ class TestrailActions:
 
             if testrail_data.testrun_id:
                 # self.update_test_run(testrail_data.testrun_id, tests_list)
-                self.add_results(self.testrail_data.testrun_id, results)
+                self._add_results(self.testrail_data.testrun_id, results)
             elif self.testrail_data.testplan_id:
                 testruns = self.get_available_testruns(self.testrail_data.testplan_id)
                 print('[{}] Testruns to update: {}'.format(TESTRAIL_PREFIX, ', '.join([str(elt) for elt in testruns])))
                 for testrun_id in testruns:
                     # self.update_test_run(testrail_data.testrun_id, tests_list)
-                    self.add_results(testrun_id, results)
+                    self._add_results(testrun_id, results)
             else:
                 print('[{}] No data published'.format(TESTRAIL_PREFIX))
 
@@ -289,12 +286,12 @@ class TestrailActions:
             'milestone_id': milestone_id
         }
 
-        response = self.client.send_post(
+        response = self.testrail_data.client.send_post(
             ADD_TESTRUN_URL.format(project_id),
             data,
             cert_check=self.testrail_data.cert_check
         )
-        error = self.client.get_error(response)
+        error = self.testrail_data.client.get_error(response)
         if error:
             print('[{}] Failed to create testrun: "{}"'.format(TESTRAIL_PREFIX, error))
             return 0
@@ -315,12 +312,12 @@ class TestrailActions:
             'case_ids': tr_keys,
         }
 
-        response = self.client.send_post(
+        response = self.testrail_data.client.send_post(
             UPDATE_RUN_URL.format(testrun_id),
             data,
             cert_check=self.testrail_data.cert_check
         )
-        error = self.client.get_error(response)
+        error = self.testrail_data.client.get_error(response)
         if error:
             print('[{}] Failed to update testrun: "{}"'.format(TESTRAIL_PREFIX, error))
         else:
@@ -335,11 +332,11 @@ class TestrailActions:
 
         :return: True if testrun exists AND is open
         """
-        response = self.client.send_get(
+        response = self.testrail_data.client.send_get(
             GET_TESTRUN_URL.format(self.testrail_data.testrun_id),
             cert_check=self.testrail_data.cert_check
         )
-        error = self.client.get_error(response)
+        error = self.testrail_data.client.get_error(response)
         if error:
             print('[{}] Failed to retrieve testrun: "{}"'.format(TESTRAIL_PREFIX, error))
             return False
@@ -351,12 +348,12 @@ class TestrailActions:
         Closes testrun.
 
         """
-        response = self.client.send_post(
+        response = self.testrail_data.client.send_post(
             CLOSE_TESTRUN_URL.format(testrun_id),
             data={},
             cert_check=self.testrail_data.cert_check
         )
-        error = self.client.get_error(response)
+        error = self.testrail_data.client.get_error(response)
         if error:
             print('[{}] Failed to close test run: "{}"'.format(TESTRAIL_PREFIX, error))
         else:
@@ -367,12 +364,12 @@ class TestrailActions:
         Closes testrun.
 
         """
-        response = self.client.send_post(
+        response = self.testrail_data.client.send_post(
             CLOSE_TESTPLAN_URL.format(testplan_id),
             data={},
             cert_check=self.testrail_data.cert_check
         )
-        error = self.client.get_error(response)
+        error = self.testrail_data.client.get_error(response)
         if error:
             print('[{}] Failed to close test plan: "{}"'.format(TESTRAIL_PREFIX, error))
         else:
@@ -384,11 +381,11 @@ class TestrailActions:
 
         :return: True if testplan exists AND is open
         """
-        response = self.client.send_get(
+        response = self.testrail_data.client.send_get(
             GET_TESTPLAN_URL.format(self.testrail_data.testplan_id),
             cert_check=self.testrail_data.cert_check
         )
-        error = self.client.get_error(response)
+        error = self.testrail_data.client.get_error(response)
         if error:
             print('[{}] Failed to retrieve testplan: "{}"'.format(TESTRAIL_PREFIX, error))
             return False
@@ -401,11 +398,11 @@ class TestrailActions:
 
         """
         testruns_list = []
-        response = self.client.send_get(
+        response = self.testrail_data.client.send_get(
             GET_TESTPLAN_URL.format(plan_id),
             cert_check=self.testrail_data.cert_check
         )
-        error = self.client.get_error(response)
+        error = self.testrail_data.client.get_error(response)
         if error:
             print('[{}] Failed to retrieve testplan: "{}"'.format(TESTRAIL_PREFIX, error))
         else:
@@ -420,11 +417,11 @@ class TestrailActions:
         :return: the list of tests containing in a testrun.
 
         """
-        response = self.client.send_get(
+        response = self.testrail_data.client.send_get(
             GET_TESTS_URL.format(run_id),
             cert_check=self.testrail_data.cert_check
         )
-        error = self.client.get_error(response)
+        error = self.testrail_data.client.get_error(response)
         if error:
             print('[{}] Failed to get tests: "{}"'.format(TESTRAIL_PREFIX, error))
             return None
@@ -433,13 +430,15 @@ class TestrailActions:
 
 class PyTestRailPlugin(TestrailActions):
 
-    def __init__(self, assign_user_id, project_id, suite_id, include_all, cert_check, tr_name,
+    def __init__(self, client, assign_user_id, project_id, suite_id, include_all, cert_check, tr_name,
                  tr_description='', run_id=0, plan_id=0, version='',
                  close_on_complete=False, publish_blocked=True, skip_missing=False, milestone_id=None,
-                 custom_comment=None):
+                 custom_comment=None, user_email=None, user_password=None, tr_url=None):
         self.testrail_data = TestRailModel(assign_user_id=assign_user_id,
                                            cert_check=cert_check,
+                                           client=client,
                                            project_id=project_id,
+                                           results=[],
                                            suite_id=suite_id,
                                            include_all=include_all,
                                            testrun_name=tr_name,
@@ -452,11 +451,14 @@ class PyTestRailPlugin(TestrailActions):
                                            skip_missing=skip_missing,
                                            milestone_id=milestone_id,
                                            custom_comment=custom_comment,
-                                           tr_keys=[]
+                                           tr_keys=[],
+                                           user_email=user_email,
+                                           user_password=user_password,
+                                           tr_url=tr_url
                                            )
         super().__init__(testrail_data=self.testrail_data)
         self.is_use_xdist = False
-        self.results = []
+        # self.results = []
 
     # pytest hooks
     def pytest_report_header(self, config, startdir):
@@ -490,24 +492,24 @@ class PyTestRailPlugin(TestrailActions):
         outcome = yield
 
         rep = outcome.get_result()
-        defectids = None
+        defect_ids = None
         if 'callspec' in dir(item):
             test_parametrize = item.callspec.params
         else:
             test_parametrize = None
         comment = rep.longreprtext if rep.longreprtext else rep.longrepr
         if item.get_closest_marker(TESTRAIL_DEFECTS_PREFIX):
-            defectids = item.get_closest_marker(TESTRAIL_DEFECTS_PREFIX).kwargs.get('defect_ids')
+            defect_ids = item.get_closest_marker(TESTRAIL_DEFECTS_PREFIX).kwargs.get('defect_ids')
         if item.get_closest_marker(TESTRAIL_PREFIX):
-            testcaseids = item.get_closest_marker(TESTRAIL_PREFIX).kwargs.get('ids')
-            if rep.when == 'call' and testcaseids:
-                for testcaseid in clean_test_ids(testcaseids):
+            testcase_ids = item.get_closest_marker(TESTRAIL_PREFIX).kwargs.get('ids')
+            if rep.when == 'call' and testcase_ids:
+                for testcase_id in clean_test_ids(testcase_ids):
                     self.testrail_data.results.append(self.add_result(
-                        testcaseid,
+                        testcase_id,
                         get_test_outcome(outcome.get_result().outcome),
                         comment=comment,
                         duration=rep.duration,
-                        defects=str(clean_test_defects(defectids)).replace('[', '').replace(']', '').replace("'", '') if defectids else None,
+                        defects=str(clean_test_defects(defect_ids)).replace('[', '').replace(']', '').replace("'", '') if defect_ids else None,
                         test_parametrize=test_parametrize))
 
     @pytest.hookimpl(tryfirst=True)
@@ -542,8 +544,6 @@ class PyTestRailPlugin(TestrailActions):
         if session.config.pluginmanager.get_plugin("xdist"):
             if is_xdist_worker(config=session.config):
                 self.is_use_xdist = True
-                session.config.workeroutput['RESULTS'] = self.testrail_data.results
-                # session.config.workeroutput['TESTRAIL_DATA'] = asdict(self.testrail_data)
                 self.publish_results('xdist multi mode + numprocesses => {}'.format(session.config.getoption('numprocesses')),
                                      testrail_data=self.testrail_data,
                                      results=self.testrail_data.results)
@@ -563,7 +563,7 @@ class NodeAction(TestrailActions):
 
     def __init__(self, testrail_data):
         self.testrail_data = testrail_data
-        self.results = None
+        # self.results = None
         super().__init__(testrail_data=self.testrail_data)
 
     def pytest_configure_node(self, node):  # type: ignore
