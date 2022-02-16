@@ -131,6 +131,17 @@ def clean_test_defects(defect_ids):
     return [(re.search('(?P<defect_id>.*)', defect_id).groupdict().get('defect_id')) for defect_id in defect_ids]
 
 
+def get_case_list(tests: list):
+    """
+    Return list of case ids from testrun
+    :param list tests: list of tests from get_tests
+    """
+    testcaseids = []
+    for test in tests:
+        testcaseids.append(test['case_id'])
+    return testcaseids
+
+
 def get_testrail_keys(items):
     """Return Tuple of Pytest nodes and TestRail ids from pytests markers"""
     testcaseids = []
@@ -298,14 +309,19 @@ class TestrailActions:
                                                                              self.testrail_data.testrun_id))
             return response['id']
 
-    def update_testrun(self, testrun_id: int, tr_keys: list) -> None:
+    def update_testrun(self, testrun_id: int, tr_keys: list, save_previous: bool = True) -> None:
         """
         Updates an existing test run
         :param testrun_id: testrun id
-        :param tr_keys: collected testrail ids.
+        :param tr_keys: collected testrail ids
+        :param save_previous: collected testrail ids
         """
+        current_tests = []
+        if save_previous:
+            current_tests = get_case_list(self.get_tests(run_id=testrun_id))
+
         data = {
-            'case_ids': tr_keys,
+            'case_ids': list(set(tr_keys + current_tests)),
         }
 
         response = self.testrail_data.client.send_post(
