@@ -28,11 +28,14 @@ TESTRAIL_PREFIX = 'testrail'
 TESTRAIL_DEFECTS_PREFIX = 'testrail_defects'
 ADD_RESULTS_URL = 'add_results_for_cases/{}'
 ADD_TESTRUN_URL = 'add_run/{}'
+ADD_TESTPLAN_ENTRY_URL = 'add_plan_entry/{}'
+ADD_TESTPLAN_URL = 'add_plan/{}'
 CLOSE_TESTRUN_URL = 'close_run/{}'
 CLOSE_TESTPLAN_URL = 'close_plan/{}'
 GET_TESTRUN_URL = 'get_run/{}'
 GET_TESTPLAN_URL = 'get_plan/{}'
 GET_TESTS_URL = 'get_tests/{}'
+GET_TESTCASES_URL = 'get_cases/{}&suite_id={}&limit=99999'
 UPDATE_RUN_URL = 'update_run/{}'
 
 COMMENT_SIZE_LIMIT = 4000
@@ -309,6 +312,32 @@ class TestrailActions:
                                                                              self.testrail_data.testrun_id))
             return response['id']
 
+    def create_plan_entry(self, suite_id, testrun_name, assign_user_id, plan_id, include_all, tr_keys, description=''):
+        data = {
+            'suite_id': suite_id,
+            'name': testrun_name,
+            'description': description,
+            'assignedto_id': assign_user_id,
+            'include_all': include_all,
+            'case_ids': tr_keys
+        }
+
+        response = self.testrail_data.client.send_post(
+            ADD_TESTPLAN_ENTRY_URL.format(plan_id),
+            data,
+            cert_check=self.testrail_data.cert_check
+        )
+        error = self.testrail_data.client.get_error(response)
+        if error:
+            print('[{}] Failed to create testrun: "{}"'.format(TESTRAIL_PREFIX, error))
+            return 0
+        else:
+            self.testrail_data.testrun_id = response['id']
+            print('[{}] New testrun created with name "{}" and ID={}'.format(TESTRAIL_PREFIX,
+                                                                             testrun_name,
+                                                                             self.testrail_data.testrun_id))
+            return response['runs'][0]['id']
+
     def update_testrun(self, testrun_id: int, tr_keys: list, save_previous: bool = True) -> None:
         """
         Updates an existing test run
@@ -424,6 +453,20 @@ class TestrailActions:
                         testruns_list.append(run['id'])
         return testruns_list
 
+    def get_cases(self, project_id, suit_id):
+        """
+       :return: the list of tests containing in a testrun.
+       """
+        response = self.testrail_data.client.send_get(
+            GET_TESTCASES_URL.format(project_id, suit_id),
+            cert_check=self.testrail_data.cert_check
+        )
+        error = self.testrail_data.client.get_error(response)
+        if error:
+            print('[{}] Failed to get tests: "{}"'.format(TESTRAIL_PREFIX, error))
+            return None
+        return response
+
     def get_tests(self, run_id):
         """
         :return: the list of tests containing in a testrun.
@@ -486,7 +529,31 @@ class PyTestRailPlugin(TestrailActions):
     @pytest.hookimpl(trylast=True)
     def pytest_collection_modifyitems(self, session, config, items):
         items_with_tr_keys = get_testrail_keys(items)
-        self.testrail_data.tr_keys = [case_id for item in items_with_tr_keys for case_id in item[1]]
+        pytest_cases = [case_id for item in items_with_tr_keys for case_id in item[1]]
+        suit_list = [test.get('id') for test in
+                     self.get_cases(self.testrail_data.project_id, self.testrail_data.suite_id)]
+        self.testrail_data.tr_keys = [case for case in pytest_cases if case in suit_list]
+
+        if self.testrail_data.testplan_id:
+            self.testrail_data.testrun_id = self.create_plan_entry(self.testrail_data.suite_id,
+                                                                   self.testrail_data.testrun_name,
+                                                                   self.testrail_data.assign_user_id,
+                                                                   self.testrail_data.testplan_id,
+                                                                   self.testrail_data.include_all,
+                                                                   self.testrail_data.tr_keys,
+                                                                   self.testrail_data.testrun_description
+                                                                   )
+        else:
+            self.testrail_data.testrun_id = self.create_test_run(self.testrail_data.assign_user_id,
+                                                                 self.testrail_data.project_id,
+                                                                 self.testrail_data.suite_id,
+                                                                 self.testrail_data.include_all,
+                                                                 self.testrail_data.testrun_name or testrun_name(),
+                                                                 self.testrail_data.tr_keys,
+                                                                 self.testrail_data.milestone_id,
+                                                                 self.testrail_data.testrun_description
+                                                                 )
+
         if self.testrail_data.skip_missing:
             tests_list = [
                 test.get('case_id') for test in self.get_tests(self.testrail_data.testrun_id)
@@ -536,17 +603,17 @@ class PyTestRailPlugin(TestrailActions):
                 if self.testrail_data.testrun_name is None:
                     self.testrail_data.testrun_name = testrun_name()
 
-            if not self.testrail_data.testrun_id:
-                self.testrail_data.testrun_id = self.create_test_run(
-                    self.testrail_data.assign_user_id,
-                    self.testrail_data.project_id,
-                    self.testrail_data.suite_id,
-                    self.testrail_data.include_all,
-                    self.testrail_data.testrun_name,
-                    self.testrail_data.tr_keys,
-                    self.testrail_data.milestone_id,
-                    self.testrail_data.testrun_description
-                )
+            # if not self.testrail_data.testrun_id:
+            #     self.testrail_data.testrun_id = self.create_test_run(
+            #         self.testrail_data.assign_user_id,
+            #         self.testrail_data.project_id,
+            #         self.testrail_data.suite_id,
+            #         self.testrail_data.include_all,
+            #         self.testrail_data.testrun_name,
+            #         self.testrail_data.tr_keys,
+            #         self.testrail_data.milestone_id,
+            #         self.testrail_data.testrun_description
+            #     )
 
     @pytest.hookimpl(trylast=True, hookwrapper=True)
     def pytest_sessionfinish(self, session, exitstatus):
