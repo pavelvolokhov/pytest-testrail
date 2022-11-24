@@ -1,7 +1,6 @@
 from operator import itemgetter
-
 from pytest_testrail.TestrailModel import TestRailModel
-from pytest_testrail.functions import get_case_list
+from pytest_testrail.functions import get_case_list, filter_publish_results
 from pytest_testrail.vars import TESTRAIL_PREFIX, TESTRAIL_TEST_STATUS, COMMENT_SIZE_LIMIT, ADD_RESULTS_URL, \
     ADD_TESTRUN_URL, ADD_TESTPLAN_ENTRY_URL, UPDATE_RUN_URL, GET_TESTRUN_URL, CLOSE_TESTRUN_URL, CLOSE_TESTPLAN_URL, \
     GET_TESTPLAN_URL, GET_TESTCASES_URL, GET_TESTS_URL, UPDATE_TESTPLAN_ENTRY, ADD_TESTPLAN_URL
@@ -106,8 +105,13 @@ class TestrailActions:
         print('[{}] Start publishing'.format(TESTRAIL_PREFIX))
 
         if results:
-            tests_list = list(set([str(result['case_id']) for result in results]))
-            print('[{}] Testcases to publish: {}'.format(TESTRAIL_PREFIX, ', '.join(tests_list)))
+            results, tests_list = filter_publish_results(results, self.diff_case_ids)
+
+            print('[{}] Testcases to publish: {}'.format(TESTRAIL_PREFIX, ', '.join(set(tests_list))))
+
+            if self.diff_case_ids:
+                print(f"[{TESTRAIL_PREFIX}] Not found following testcases in Suite ID={self.testrail_data.suite_id}")
+                print(f"[{TESTRAIL_PREFIX}] Testcases will be ignored: {self.diff_case_ids}")
 
             if testrail_data.testrun_id:
                 self._add_results(self.testrail_data.testrun_id, results)
@@ -312,23 +316,6 @@ class TestrailActions:
         else:
             print('[{}] Test plan with ID={} was closed'.format(TESTRAIL_PREFIX, self.testrail_data.testplan_id))
 
-    def is_testplan_available(self):
-        """
-        Ask if testplan is available in TestRail.
-
-        :return: True if testplan exists AND is open
-        """
-        response = self.testrail_data.client.send_get(
-            GET_TESTPLAN_URL.format(self.testrail_data.testplan_id),
-            cert_check=self.testrail_data.cert_check
-        )
-        error = self.testrail_data.client.get_error(response)
-        if error:
-            print('[{}] Failed to retrieve testplan: "{}"'.format(TESTRAIL_PREFIX, error))
-            return False
-
-        return response['is_completed'] is False
-
     def get_cases(self, project_id, suit_id):
         """
        :return: the list of tests containing in a testrun.
@@ -397,3 +384,17 @@ class TestrailActions:
                 if not run['is_completed']:
                     testruns_list.append(run['id'])
         return testruns_list
+
+    def is_testplan_available(self):
+        """
+        Ask if testplan is available in TestRail.
+
+        :return: True if testplan exists AND is open
+        """
+        response = self.get_plan(self.testrail_data.testplan_id)
+        error = self.testrail_data.client.get_error(response)
+        if error:
+            print('[{}] Failed to retrieve testplan: "{}"'.format(TESTRAIL_PREFIX, error))
+            return False
+
+        return response['is_completed'] is False

@@ -1,14 +1,11 @@
 # -*- coding: UTF-8 -*-
-from datetime import datetime
-from operator import itemgetter
-
 import pytest
 
 from pytest_testrail.TestrailModel import TestRailModel
 from pytest_testrail.testrail_actions import TestrailActions
 from pytest_testrail.vars import TESTRAIL_DEFECTS_PREFIX, TESTRAIL_PREFIX
-from pytest_testrail.functions import get_testrail_keys, testrun_name, clean_test_ids, get_test_outcome, \
-    clean_test_defects, is_xdist_worker, pytestrail, testrail, testplan_name
+from pytest_testrail.functions import get_testrail_keys, testrun_name, testplan_name, clean_test_ids, \
+    get_test_outcome, clean_test_defects, is_xdist_worker, pytestrail, testrail
 
 
 class PyTestRailPlugin(TestrailActions):
@@ -43,6 +40,7 @@ class PyTestRailPlugin(TestrailActions):
                                            )
         super().__init__(testrail_data=self.testrail_data)
         self.is_use_xdist = False
+        self.diff_case_ids = None
 
     def _create_test_plan(self):
         self.create_plan(self.testrail_data.project_id,
@@ -71,10 +69,6 @@ class PyTestRailPlugin(TestrailActions):
                              self.testrail_data.testrun_description
                              )
 
-    def _try_to_find_entry_id_in_testpaln(self):
-        # self.//
-        pass
-
     # pytest hooks
     def pytest_report_header(self, config, startdir):
         """ Add extra-info in header """
@@ -98,10 +92,11 @@ class PyTestRailPlugin(TestrailActions):
 
         self.testrail_data.tr_keys = [case for case in pytest_case_ids if case in suite_case_ids]
 
-        diff_case_ids = list(set(pytest_case_ids).difference(suite_case_ids))
-        if diff_case_ids:
+        self.diff_case_ids = list(set(pytest_case_ids).difference(suite_case_ids))
+
+        if self.diff_case_ids:
             print(f"In pytest run have testcases that not exist in suite({self.testrail_data.suite_id})\n"
-                  f"Diff: {diff_case_ids}")
+                  f"Diff: {self.diff_case_ids}")
 
         if self.testrail_data.testplan_id and not self.testrail_data.testrun_id:
             self._create_test_plan_entry()
@@ -163,7 +158,6 @@ class PyTestRailPlugin(TestrailActions):
             if not self.testrail_data.testrun_id and not self.testrail_data.testplan_id \
                     and self.testrail_data.testplan_name:
                 self._create_test_plan()
-
 
     @pytest.hookimpl(trylast=True, hookwrapper=True)
     def pytest_sessionfinish(self, session, exitstatus):

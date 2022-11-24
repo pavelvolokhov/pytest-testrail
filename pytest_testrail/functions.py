@@ -131,3 +131,13 @@ def get_testrail_keys(items):
                 )
             )
     return testcaseids
+
+
+def filter_publish_results(results, ignore_cases):
+    clear_results = []
+    test_case_ids_list = []
+    for result in results:
+        if int(result['case_id']) not in ignore_cases:
+            clear_results.append(result)
+            test_case_ids_list.append(str(result['case_id']))
+    return clear_results, test_case_ids_list
