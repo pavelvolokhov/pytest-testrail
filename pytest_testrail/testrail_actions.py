@@ -356,7 +356,7 @@ class TestrailActions:
         error = self.testrail_data.client.get_error(response)
         if error:
             print('[{}] Failed to get tests: "{}"'.format(TESTRAIL_PREFIX, error))
-            return None
+            return []
         return response
 
     def get_plan(self, plan_id):
