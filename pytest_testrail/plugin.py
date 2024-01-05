@@ -178,6 +178,12 @@ class PyTestRailPlugin(TestrailActions):
                     mark = pytest.mark.skip(f'[{TESTRAIL_PREFIX}] Test {case_id} is not present in testrun.')
                     item.add_marker(mark)
 
+    # @pytest.hookspec()
+    @pytest.hookimpl(trylast=True)
+    def pytest_xdist_node_collection_finished(self, node, ids):
+        """called by the controller node when a worker node finishes collecting."""
+        print(f"[{TESTRAIL_PREFIX}] pytest_xdist_node_collection_finished {node}")
+
     @pytest.hookimpl(tryfirst=True, hookwrapper=True)
     def pytest_runtest_makereport(self, item, call):
         """ Collect result and associated testcases (TestRail) of an execution """
