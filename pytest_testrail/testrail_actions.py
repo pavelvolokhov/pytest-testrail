@@ -111,15 +111,6 @@ class TestrailActions:
             if error:
                 print('[{}] Info: Testcases not published for following reason: "{}"'.format(TESTRAIL_PREFIX, error))
 
-        response = self.testrail_data.client.send_post(
-            ADD_RESULTS_URL.format(testrun_id),
-            data,
-            cert_check=self.testrail_data.cert_check
-        )
-        error = self.testrail_data.client.get_error(response)
-        if error:
-            print('[{}] Info: Testcases not published for following reason: "{}"'.format(TESTRAIL_PREFIX, error))
-
     def publish_results(self, testrail_data: TestRailModel = None, results: list = None):
         print('[{}] Start publishing'.format(TESTRAIL_PREFIX))
 
