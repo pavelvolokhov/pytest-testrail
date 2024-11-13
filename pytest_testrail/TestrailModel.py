@@ -31,6 +31,8 @@ class TestRailModel:
     actual_suites_with_case_ids: dict = None
     plan_entry_storage: dict = None
     diff_case_ids: list = None
+    available_suite_ids: dict = None
+
 
 @dataclass()
 class Store:
