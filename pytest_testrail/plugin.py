@@ -1,5 +1,7 @@
 # -*- coding: UTF-8 -*-
+import json
 import pytest
+from filelock import FileLock
 
 from pytest_testrail.TestrailModel import TestRailModel
 from pytest_testrail.testrail_actions import TestrailActions
@@ -136,33 +138,44 @@ class PyTestRailPlugin(TestrailActions):
             print(f"[{TESTRAIL_PREFIX}] In pytest run have testcases that not exist in suites\n"
                   f"[{TESTRAIL_PREFIX}] Diff: {self.testrail_data.diff_case_ids}")
 
-        if self.testrail_data.testrun_id:
-            # update specified test run
-            run_info = self.get_run(run_id=self.testrail_data.testrun_id)
-            if run_info['plan_id']:
-                entry_id = self.get_testplan_entry_id(plan_id=run_info['plan_id'],
-                                                      run_id=self.testrail_data.testrun_id
-                                                      )
-                self.update_testplan_entry(plan_id=run_info['plan_id'], entry_id=entry_id,
-                                           run_id=self.testrail_data.testrun_id,
-                                           tr_keys=self.testrail_data.actual_suites_with_case_ids[run_info['suite_id']],
-                                           suite_id=run_info['suite_id'],
-                                           save_previous=True)
-            else:
-                self.update_testrun(testrun_id=self.testrail_data.testrun_id,
-                                    tr_keys=self.testrail_data.actual_suites_with_case_ids[run_info['suite_id']],
-                                    suite_id=run_info['suite_id'],
-                                    save_previous=True)
-        else:
-            # create testrun for each suite
-            for suite_id in self.testrail_data.actual_suites_with_case_ids.keys():
-                if not self.testrail_data.actual_suites_with_case_ids[suite_id]:
-                    print(f"[{TESTRAIL_PREFIX}] No testcases for suite {suite_id}! Testrun not created")
-                    continue
-                if self.testrail_data.testplan_id:
-                    self._create_test_plan_entry(suite_id=suite_id, test_suite_name=available_suite_ids.get(suite_id))
+        root_tmp_dir = config._tmp_path_factory.getbasetemp().parent
+        fn = root_tmp_dir / "data.json"
+        with FileLock(str(fn) + ".lock"):
+            if not fn.is_file():
+                if self.testrail_data.testrun_id:
+                    # update specified test run
+                    run_info = self.get_run(run_id=self.testrail_data.testrun_id)
+                    if run_info['plan_id']:
+                        entry_id = self.get_testplan_entry_id(plan_id=run_info['plan_id'],
+                                                              run_id=self.testrail_data.testrun_id
+                                                              )
+                        self.update_testplan_entry(plan_id=run_info['plan_id'], entry_id=entry_id,
+                                                   run_id=self.testrail_data.testrun_id,
+                                                   tr_keys=self.testrail_data.actual_suites_with_case_ids[run_info['suite_id']],
+                                                   suite_id=run_info['suite_id'],
+                                                   save_previous=True)
+                    else:
+                        self.update_testrun(testrun_id=self.testrail_data.testrun_id,
+                                            tr_keys=self.testrail_data.actual_suites_with_case_ids[run_info['suite_id']],
+                                            suite_id=run_info['suite_id'],
+                                            save_previous=True)
                 else:
-                    self._create_test_run(suite_id=suite_id, test_suite_name=available_suite_ids.get(suite_id))
+                    # create testrun for each suite
+                    for suite_id in self.testrail_data.actual_suites_with_case_ids.keys():
+                        if not self.testrail_data.actual_suites_with_case_ids[suite_id]:
+                            print(f"[{TESTRAIL_PREFIX}] No testcases for suite {suite_id}! Testrun not created")
+                            continue
+                        if self.testrail_data.testplan_id:
+                            self._create_test_plan_entry(suite_id=suite_id, test_suite_name=available_suite_ids.get(suite_id))
+                        else:
+                            self._create_test_run(suite_id=suite_id, test_suite_name=available_suite_ids.get(suite_id))
+                    prepared_data = {"plan_entry_storage": self.testrail_data.plan_entry_storage,
+                                     "actual_suites_with_case_ids": self.testrail_data.actual_suites_with_case_ids}
+                    fn.write_text(json.dumps(prepared_data))
+            else:
+                prepared_data = json.loads(fn.read_text())
+                self.testrail_data.plan_entry_storage = prepared_data.get("plan_entry_storage")
+                self.testrail_data.actual_suites_with_case_ids = prepared_data.get("actual_suites_with_case_ids")
         if self.testrail_data.skip_missing:
             for item, case_id in items_with_tr_keys:
                 if set(case_id).intersection(set(self.testrail_data.diff_case_ids)):
