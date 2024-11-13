@@ -124,8 +124,8 @@ class PyTestRailPlugin(TestrailActions):
 
         # ---------------------------------------------
         testrail_list_of_suites_and_cases = {}
-        available_suite_ids = self.get_suites(project_id=self.testrail_data.project_id)
-        available_suite_ids = {suite['id']: suite['name'] for suite in available_suite_ids}
+        self.testrail_data.available_suite_ids = self.get_suites(project_id=self.testrail_data.project_id)
+        self.testrail_data.available_suite_ids = {suite['id']: suite['name'] for suite in self.testrail_data.available_suite_ids}
         # получили список тест-сьютов [11234,34234,123213]
         if self.testrail_data.suite_id:
             suite_ids = {int(self.testrail_data.suite_id)}
@@ -135,7 +135,7 @@ class PyTestRailPlugin(TestrailActions):
             suite_ids = {suite for item in items_with_suite_ids for suite in item[1]}
 
             for suite_id in suite_ids:
-                if suite_id not in available_suite_ids.keys():
+                if suite_id not in self.testrail_data.available_suite_ids.keys():
                     print(f"[{TESTRAIL_PREFIX}] Test suite ({suite_id}) not available "
                           f"for project_id: {self.testrail_data.project_id}")
 
@@ -167,7 +167,7 @@ class PyTestRailPlugin(TestrailActions):
         if self.testrail_data.diff_case_ids:
             print(f"[{TESTRAIL_PREFIX}] In pytest run have testcases that not exist in suites\n"
                   f"[{TESTRAIL_PREFIX}] Diff: {self.testrail_data.diff_case_ids}")
-        self.testrail_data.actual_suites_with_case_ids = available_suite_ids
+        self.testrail_data.actual_suites_with_case_ids = self.testrail_data.available_suite_ids
 
         root_tmp_dir = config._tmp_path_factory.getbasetemp().parent
         fn = root_tmp_dir / "data.json"
