@@ -119,18 +119,18 @@ class PyTestRailPlugin(TestrailActions):
 
     @pytest.hookimpl(trylast=True)
     def pytest_collection_modifyitems(self, session, config, items):
-        # получили все тесты с тест-номерами из прогона
+        # received all the tests with test ids from the run
         items_with_tr_keys = get_testrail_keys(items)
 
         # ---------------------------------------------
         testrail_list_of_suites_and_cases = {}
         self.testrail_data.available_suite_ids = self.get_suites(project_id=self.testrail_data.project_id)
         self.testrail_data.available_suite_ids = {suite['id']: suite['name'] for suite in self.testrail_data.available_suite_ids}
-        # получили список тест-сьютов [11234,34234,123213]
+        # got a list of test suites [11234,34234,123213]
         if self.testrail_data.suite_id:
             suite_ids = {int(self.testrail_data.suite_id)}
         else:
-            # получили все тесты с тест-сьютами из прогона
+            # got all the tests with test suites from the run
             items_with_suite_ids = get_testrail_suite_ids(items)
             suite_ids = {suite for item in items_with_suite_ids for suite in item[1]}
 
@@ -139,31 +139,31 @@ class PyTestRailPlugin(TestrailActions):
                     print(f"[{TESTRAIL_PREFIX}] Test suite ({suite_id}) not available "
                           f"for project_id: {self.testrail_data.project_id}")
 
-        # получили список тест-сьютов с соответствующими тест-кейсами из тестрейла
+        # got a list of test suites with corresponding test cases from the Testrail
         for suite_id in suite_ids:
             testrail_list_of_suites_and_cases[suite_id] = \
                 [test.get('id') for test in self.get_cases(self.testrail_data.project_id, suite_id)]
 
         # ---------------------------------------------
-        # получили список всех тест-номеров в прогоне
+        # got a list of all the test ids in the run
         pytest_case_ids = [case_id for item in items_with_tr_keys for case_id in item[1]]
 
-        # получили список всех тест-кейсов со всех тест-сьютов
+        # got a list of all the test cases from all the test suites
         suite_case_ids = [case for value in testrail_list_of_suites_and_cases for case in
                           testrail_list_of_suites_and_cases[value]]
 
-        # получили список тест-кейсов которые нужно запустить
+        # got a list of test cases to run.
         self.testrail_data.tr_keys = [case for case in pytest_case_ids if case in suite_case_ids]
 
-        # получили список тест-сьютов с участвующими тест-кейсами в прогоне
+        # received a list of test suites with participating test cases in the run
         for suite_id in suite_ids:
             self.testrail_data.actual_suites_with_case_ids[suite_id] = list(
                 set(pytest_case_ids).intersection(testrail_list_of_suites_and_cases[suite_id]))
         print(f"[{TESTRAIL_PREFIX}] PyTest cases: {pytest_case_ids}")
-        # получили список тест-кейсов, которых нет в прогоне
+        # received a list of test cases that are not in the run
         self.testrail_data.diff_case_ids = list(set(pytest_case_ids).difference(suite_case_ids))
 
-        # вывели список тест-кейсов которых нет в тест-сьютах
+        # Showed a list of test cases that are not in the test suites
         if self.testrail_data.diff_case_ids:
             print(f"[{TESTRAIL_PREFIX}] In pytest run have testcases that not exist in suites\n"
                   f"[{TESTRAIL_PREFIX}] Diff: {self.testrail_data.diff_case_ids}")
