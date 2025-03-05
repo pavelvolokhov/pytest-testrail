@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -32,6 +32,7 @@ class TestRailModel:
     plan_entry_storage: dict = None
     diff_case_ids: list = None
     available_suite_ids: dict = None
+    test_comments: list = field(default_factory=[])
 
 
 @dataclass()

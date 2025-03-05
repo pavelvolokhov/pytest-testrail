@@ -41,10 +41,22 @@ class PyTestRailPlugin(TestrailActions):
                                            tr_url=tr_url,
                                            actual_suites_with_case_ids={},
                                            plan_entry_storage={},
-                                           diff_case_ids=[]
+                                           diff_case_ids=[],
+                                           test_comments=[]
                                            )
         super().__init__(testrail_data=self.testrail_data)
         self.is_use_xdist = False
+
+    @pytest.fixture(scope='function')
+    def testrail_comment(self, request):
+        """ this is fixture for adding pytest report section """
+
+        def _add_section(*args):
+            for arg in args:
+                request.node.add_report_section("call", "testrail_comment", str(arg))
+
+        yield _add_section
+
 
     def _create_test_plan(self):
         self.create_plan(self.testrail_data.project_id,
@@ -196,13 +208,17 @@ class PyTestRailPlugin(TestrailActions):
         defect_ids = None
         test_parametrize = None
         report_messages = []
+        test_comments: list = []
 
         if 'callspec' in dir(item):
             test_parametrize = item.callspec.params
 
         if hasattr(rep, 'sections'):
             for section in rep.sections:
-                report_messages.append(section[1])
+                if "testrail_comment" in section[0]:
+                    test_comments.append(section[1])
+                else:
+                    report_messages.append(section[1])
         if rep.longreprtext and rep.longreprtext.strip():
             report_messages.append(rep.longreprtext)
         if rep.skipped and hasattr(rep, 'wasxfail'):
@@ -229,7 +245,8 @@ class PyTestRailPlugin(TestrailActions):
                         defects=str(clean_test_defects(defect_ids)).replace('[', '').replace(']', '').replace("'",
                                                                                                               '') if defect_ids else None,
                         test_parametrize=test_parametrize,
-                        suite_id=suite_id))
+                        suite_id=suite_id,
+                        test_comments=test_comments))
             return None
 
     @pytest.hookimpl(tryfirst=True)

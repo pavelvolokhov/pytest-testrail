@@ -12,18 +12,20 @@ class TestrailActions:
     def __init__(self, testrail_data: TestRailModel):
         self.testrail_data = testrail_data
 
-    def add_result(self, test_id, status, comment='', defects=None, duration=0, test_parametrize=None, suite_id=0):
+    def add_result(self, test_id, status, comment: str = "", defects=None, duration=0, test_parametrize=None, suite_id=0,
+                   test_comments: list | None = None):
         """
         Add a new result to results dict to be submitted at the end.
 
+        :param suite_id:
+        :param test_id:
+        :param test_comments: add text from comment fixture
         :param list test_parametrize: Add test parametrize to test result
         :param defects: Add defects to test result
-        # :param list test_ids: list of test_ids.
         :param int status: status code of test (pass or fail).
         :param comment: None or a failure representation.
         :param duration: Time it took to run just the test.
         """
-
         data = {
             'case_id': test_id,
             'status_id': status,
@@ -31,7 +33,8 @@ class TestrailActions:
             'duration': duration,
             'defects': defects,
             'test_parametrize': test_parametrize,
-            "suite_id": suite_id
+            "suite_id": suite_id,
+            "test_comments": test_comments or []
         }
         return data
 
