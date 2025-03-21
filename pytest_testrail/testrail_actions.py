@@ -79,11 +79,15 @@ class TestrailActions:
                 entry['version'] = self.testrail_data.version
             comment = result.get('comment', '')
             test_parametrize = result.get('test_parametrize', '')
+            test_comments = result.get('test_comments', [])
             entry['comment'] = u''
             if test_parametrize:
                 entry['comment'] += u"# Test parametrize: #\n"
                 entry['comment'] += str(test_parametrize) + u'\n\n'
-            if comment:
+            if test_comments:
+                entry['comment'] += u"# Test comments: #\n"
+                entry['comment'] += u'\n'.join(test_comments) + u'\n\n'
+            if comment and result.get('status_id') != 1:
                 # Indent text to avoid string formatting by TestRail. Limit size of comment.
                 entry['comment'] += u"# Pytest result: #\n"
                 entry['comment'] += u'Log truncated\n...\n' if len(str(comment)) > COMMENT_SIZE_LIMIT else u''

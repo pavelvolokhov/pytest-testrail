@@ -1,7 +1,5 @@
 # -*- coding: UTF-8 -*-
-import json
 import pytest
-from filelock import FileLock
 
 from pytest_testrail.TestrailModel import TestRailModel
 from pytest_testrail.testrail_actions import TestrailActions
@@ -179,20 +177,9 @@ class PyTestRailPlugin(TestrailActions):
         if self.testrail_data.diff_case_ids:
             print(f"[{TESTRAIL_PREFIX}] In pytest run have testcases that not exist in suites\n"
                   f"[{TESTRAIL_PREFIX}] Diff: {self.testrail_data.diff_case_ids}")
-        self.testrail_data.actual_suites_with_case_ids = self.testrail_data.available_suite_ids
 
-        root_tmp_dir = config._tmp_path_factory.getbasetemp().parent
-        fn = root_tmp_dir / "data.json"
-        with FileLock(str(fn) + ".lock"):
-            if not fn.is_file():
-                self.create_report_entries()
-                prepared_data = {"plan_entry_storage": self.testrail_data.plan_entry_storage,
-                                 "actual_suites_with_case_ids": self.testrail_data.actual_suites_with_case_ids}
-                fn.write_text(json.dumps(prepared_data))
-            else:
-                prepared_data = json.loads(fn.read_text())
-                self.testrail_data.plan_entry_storage = prepared_data.get("plan_entry_storage")
-                self.testrail_data.actual_suites_with_case_ids = prepared_data.get("actual_suites_with_case_ids")
+        self.create_report_entries()
+
         if self.testrail_data.skip_missing:
             for item, case_id in items_with_tr_keys:
                 if set(case_id).intersection(set(self.testrail_data.diff_case_ids)):
@@ -217,14 +204,10 @@ class PyTestRailPlugin(TestrailActions):
             for section in rep.sections:
                 if "testrail_comment" in section[0]:
                     test_comments.append(section[1])
-                else:
-                    report_messages.append(section[1])
-        if rep.longreprtext and rep.longreprtext.strip():
+        if rep.when == "call" and rep.failed:
             report_messages.append(rep.longreprtext)
         if rep.skipped and hasattr(rep, 'wasxfail'):
             report_messages.append(f'\nXFail: {rep.wasxfail}')
-        elif rep.skipped:
-            return None
 
         comment = '\n'.join(report_messages)
 
