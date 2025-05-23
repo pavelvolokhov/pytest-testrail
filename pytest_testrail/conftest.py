@@ -69,9 +69,9 @@ def pytest_addoption(parser):
     parser.addini('tr-testrun-suite-id', help=Messages.TR_TESTRUN_SUITE_ID, default=None)
 
     group.addoption(
-        '--tr-testrun-suite-include-all', action='store_true', default=None, help=Messages.TR_TESTRUN_SUITE_INCLUDE_ALL
+        '--tr-testrun-suite-include-all', action='store_true', default=False, help=Messages.TR_TESTRUN_SUITE_INCLUDE_ALL
     )
-    parser.addini('testrun-suite-include-all', help=Messages.TR_TESTRUN_SUITE_INCLUDE_ALL, default=None)
+    parser.addini('tr-testrun-suite-include-all', help=Messages.TR_TESTRUN_SUITE_INCLUDE_ALL, default=False)
 
     group.addoption('--tr-testrun-name', action='store', default=None, help=Messages.TR_TESTRUN_NAME)
     parser.addini('tr-testrun-name', help=Messages.TR_TESTRUN_NAME, default=None)
