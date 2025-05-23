@@ -12,18 +12,20 @@ class TestrailActions:
     def __init__(self, testrail_data: TestRailModel):
         self.testrail_data = testrail_data
 
-    def add_result(self, test_id, status, comment='', defects=None, duration=0, test_parametrize=None, suite_id=0):
+    def add_result(self, test_id, status, comment: str = "", defects=None, duration=0, test_parametrize=None, suite_id=0,
+                   test_comments: list | None = None):
         """
         Add a new result to results dict to be submitted at the end.
 
+        :param suite_id:
+        :param test_id:
+        :param test_comments: add text from comment fixture
         :param list test_parametrize: Add test parametrize to test result
         :param defects: Add defects to test result
-        # :param list test_ids: list of test_ids.
         :param int status: status code of test (pass or fail).
         :param comment: None or a failure representation.
         :param duration: Time it took to run just the test.
         """
-
         data = {
             'case_id': test_id,
             'status_id': status,
@@ -31,7 +33,8 @@ class TestrailActions:
             'duration': duration,
             'defects': defects,
             'test_parametrize': test_parametrize,
-            "suite_id": suite_id
+            "suite_id": suite_id,
+            "test_comments": test_comments or []
         }
         return data
 
@@ -76,11 +79,15 @@ class TestrailActions:
                 entry['version'] = self.testrail_data.version
             comment = result.get('comment', '')
             test_parametrize = result.get('test_parametrize', '')
+            test_comments = result.get('test_comments', [])
             entry['comment'] = u''
             if test_parametrize:
                 entry['comment'] += u"# Test parametrize: #\n"
                 entry['comment'] += str(test_parametrize) + u'\n\n'
-            if comment:
+            if test_comments:
+                entry['comment'] += u"# Test comments: #\n"
+                entry['comment'] += u'\n'.join(test_comments) + u'\n\n'
+            if comment and result.get('status_id') != 1:
                 # Indent text to avoid string formatting by TestRail. Limit size of comment.
                 entry['comment'] += u"# Pytest result: #\n"
                 entry['comment'] += u'Log truncated\n...\n' if len(str(comment)) > COMMENT_SIZE_LIMIT else u''
@@ -110,15 +117,6 @@ class TestrailActions:
             error = self.testrail_data.client.get_error(response)
             if error:
                 print('[{}] Info: Testcases not published for following reason: "{}"'.format(TESTRAIL_PREFIX, error))
-
-        response = self.testrail_data.client.send_post(
-            ADD_RESULTS_URL.format(testrun_id),
-            data,
-            cert_check=self.testrail_data.cert_check
-        )
-        error = self.testrail_data.client.get_error(response)
-        if error:
-            print('[{}] Info: Testcases not published for following reason: "{}"'.format(TESTRAIL_PREFIX, error))
 
     def publish_results(self, testrail_data: TestRailModel = None, results: list = None):
         print('[{}] Start publishing'.format(TESTRAIL_PREFIX))
