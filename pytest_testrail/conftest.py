@@ -3,6 +3,7 @@ import os
 import sys
 from .plugin import PyTestRailPlugin
 from .testrail_api import APIClient
+
 if sys.version_info.major == 2:
     # python2
     import ConfigParser as configparser
@@ -11,127 +12,120 @@ else:
     import configparser
 
 
+class Messages:
+    TESTRAIL = 'Create and update testruns with TestRail'
+    TR_CONFIG = 'Path to the config file containing information about the TestRail server (defaults to testrail.cfg)'
+    TR_URL = 'TestRail address you use to access TestRail with your web browser (config file: url in API section)'
+    TR_EMAIL = 'Email for the account on the TestRail server (config file: email in API section)'
+    TR_PASSWORD = 'Password for the account on the TestRail server (config file: password in API section)'
+    TR_TIMEOUT = 'Set timeout for connecting to TestRail server'
+    TR_TESTRUN_ASSIGNED_TO = 'ID of the user assigned to the test run (config file: assignedto_id in TESTRUN section)'
+    TR_TESTRUN_PROJECT_ID = 'ID of the project the test run is in (config file: project_id in TESTRUN section)'
+    TR_TESTRUN_SUITE_ID = 'ID of the test suite containing the test cases (config file: suite_id in TESTRUN section)'
+    TR_TESTRUN_SUITE_INCLUDE_ALL = 'Include all test cases in specified test suite when creating test run config file: include_all in TESTRUN section)'
+    TR_TESTRUN_NAME = 'Name given to testrun, that appears in TestRail (config file: name in TESTRUN section)'
+    TR_TESTRUN_DESCRIPTION = 'Description given to testrun, that appears in TestRail config file: description in TESTRUN section'
+    TR_RUN_ID = 'Identifier of testrun, that appears in TestRail. If provided, option "--tr-testrun-name" will be ignored'
+    TR_TEST_PLAN_ID = 'Identifier of testplan, that appears in TestRail (config file: plan_id in TESTRUN section). If provided, option "--tr-testrun-name" will be ignored'
+    TR_TEST_PLAN_NAME = 'Name given to testplan, that appears in TestRail (config file: name in TESTRUN section)'
+    TR_TEST_PLAN_DESCRIPTION = 'Description given to testplan, that appears in TestRail (config file: name in TESTRUN section)'
+    TR_TEST_PLAN_DESCRIPTION_DEFAULT = 'Test Plan was created via AutoTest'
+    TR_VERSION = 'Indicate a version in Test Case result'
+    TR_NO_SSL_CHECK = 'Do not check for valid SSL certificate on TestRail host'
+    TR_CLOSE_ON_COMPLETE = 'Close a test run on completion'
+    TR_DONT_PUBLISH_BLOCKED = 'Determine if results of "blocked" testcases (in TestRail) are published or not'
+    TR_SKIP_MISSING = 'Skip test cases that are not present in testrun'
+    TR_MILESTONE_ID = 'Identifier of milestone, to be used in run creation (config file: milestone_id in TESTRUN section)'
+    TC_CUSTOM_COMMENT = 'Custom comment, to be appended to default comment for test case (config file: custom_comment in TESTCASE section)'
+
+
 def pytest_addoption(parser):
     group = parser.getgroup('testrail')
+    group.addoption('--testrail', action='store_true', help=Messages.TESTRAIL)
+    parser.addini("testrail", help=Messages.TESTRAIL, type='bool', default=None)
+
+    group.addoption('--tr-config', action='store', default='testrail.cfg', help=Messages.TR_CONFIG)
+    parser.addini('tr-config', help=Messages.TR_CONFIG, default='testrail.cfg')
+
+    group.addoption('--tr-url', action='store', help=Messages.TR_URL)
+    parser.addini('tr-url', help=Messages.TR_URL, default=None)
+
+    group.addoption('--tr-email', action='store', help=Messages.TR_EMAIL)
+    parser.addini('tr-email', help=Messages.TR_EMAIL, default=None)
+
+    group.addoption('--tr-password', action='store', help=Messages.TR_PASSWORD)
+    parser.addini('tr-password', help=Messages.TR_PASSWORD, default=None)
+
+    group.addoption('--tr-timeout', action='store', help=Messages.TR_TIMEOUT)
+    parser.addini('tr-timeout', help=Messages.TR_TIMEOUT, default=None)
+
+    group.addoption('--tr-testrun-assignedto-id', action='store', help=Messages.TR_TESTRUN_ASSIGNED_TO)
+    parser.addini('tr-testrun-assignedto-id', help=Messages.TR_TESTRUN_ASSIGNED_TO, default=None)
+
+    group.addoption('--tr-testrun-project-id', action='store', help=Messages.TR_TESTRUN_PROJECT_ID)
+    parser.addini('tr-testrun-project-id', help=Messages.TR_TESTRUN_PROJECT_ID, default=None)
+
+    group.addoption('--tr-testrun-suite-id', action='store', help=Messages.TR_TESTRUN_SUITE_ID)
+    parser.addini('tr-testrun-suite-id', help=Messages.TR_TESTRUN_SUITE_ID, default=None)
+
     group.addoption(
-        '--testrail',
-        action='store_true',
-        help='Create and update testruns with TestRail')
-    group.addoption(
-        '--tr-config',
-        action='store',
-        default='testrail.cfg',
-        help='Path to the config file containing information about the TestRail server (defaults to testrail.cfg)')
-    group.addoption(
-        '--tr-url',
-        action='store',
-        help='TestRail address you use to access TestRail with your web browser (config file: url in API section)')
-    group.addoption(
-        '--tr-email',
-        action='store',
-        help='Email for the account on the TestRail server (config file: email in API section)')
-    group.addoption(
-        '--tr-password',
-        action='store',
-        help='Password for the account on the TestRail server (config file: password in API section)')
-    group.addoption(
-        '--tr-timeout',
-        action='store',
-        help='Set timeout for connecting to TestRail server')
-    group.addoption(
-        '--tr-testrun-assignedto-id',
-        action='store',
-        help='ID of the user assigned to the test run (config file: assignedto_id in TESTRUN section)')
-    group.addoption(
-        '--tr-testrun-project-id',
-        action='store',
-        help='ID of the project the test run is in (config file: project_id in TESTRUN section)')
-    group.addoption(
-        '--tr-testrun-suite-id',
-        action='store',
-        help='ID of the test suite containing the test cases (config file: suite_id in TESTRUN section)')
-    group.addoption(
-        '--tr-testrun-suite-include-all',
-        action='store_true',
-        default=None,
-        help='Include all test cases in specified test suite when creating test run \
-              (config file: include_all in TESTRUN section)')
-    group.addoption(
-        '--tr-testrun-name',
-        action='store',
-        default=None,
-        help='Name given to testrun, that appears in TestRail (config file: name in TESTRUN section)')
-    group.addoption(
-        '--tr-testrun-description',
-        action='store',
-        default=None,
-        help='Description given to testrun, that appears in TestRail (config file: description in TESTRUN section)')
-    group.addoption(
-        '--tr-run-id',
-        action='store',
-        default=0,
-        required=False,
-        help='Identifier of testrun, that appears in TestRail. If provided, \
-              option "--tr-testrun-name" will be ignored')
-    group.addoption(
-        '--tr-plan-id',
-        action='store',
-        required=False,
-        help='Identifier of testplan, that appears in TestRail (config file: plan_id in TESTRUN section).\
-              If provided, option "--tr-testrun-name" will be ignored')
-    group.addoption(
-        '--tr-testplan-name',
-        action='store',
-        default=None,
-        help='Name given to testplan, that appears in TestRail (config file: name in TESTRUN section)')
+        '--tr-testrun-suite-include-all', action='store_true', default=False, help=Messages.TR_TESTRUN_SUITE_INCLUDE_ALL
+    )
+    parser.addini('tr-testrun-suite-include-all', help=Messages.TR_TESTRUN_SUITE_INCLUDE_ALL, default=False)
+
+    group.addoption('--tr-testrun-name', action='store', default=None, help=Messages.TR_TESTRUN_NAME)
+    parser.addini('tr-testrun-name', help=Messages.TR_TESTRUN_NAME, default=None)
+
+    group.addoption('--tr-testrun-description', action='store', default=None, help=Messages.TR_TESTRUN_DESCRIPTION)
+    parser.addini('tr-testrun-description', help=Messages.TR_TESTRUN_DESCRIPTION, default=None)
+
+    group.addoption('--tr-run-id', action='store', default=0, required=False, help=Messages.TR_RUN_ID)
+    parser.addini('tr-run-id', help=Messages.TR_RUN_ID, default=0)
+
+    group.addoption('--tr-plan-id', action='store', required=False, help=Messages.TR_TEST_PLAN_ID)
+    parser.addini('tr-plan-id', help=Messages.TR_TEST_PLAN_ID, default=None)
+
+    group.addoption('--tr-testplan-name', action='store', default=None, help=Messages.TR_TEST_PLAN_NAME)
+    parser.addini('tr-testplan-name', help=Messages.TR_TEST_PLAN_NAME, default=None)
+
     group.addoption(
         '--tr-testplan-description',
         action='store',
-        default='Test Plan was created via AutoTest',
-        help='Name given to testplan, that appears in TestRail (config file: name in TESTRUN section)')
-    group.addoption(
-        '--tr-version',
-        action='store',
-        default='',
-        required=False,
-        help='Indicate a version in Test Case result')
-    group.addoption(
-        '--tr-no-ssl-cert-check',
-        action='store_false',
-        default=None,
-        help='Do not check for valid SSL certificate on TestRail host')
-    group.addoption(
-        '--tr-close-on-complete',
-        action='store_true',
-        default=False,
-        required=False,
-        help='Close a test run on completion')
-    group.addoption(
-        '--tr-dont-publish-blocked',
-        action='store_false',
-        required=False,
-        help='Determine if results of "blocked" testcases (in TestRail) are published or not')
-    group.addoption(
-        '--tr-skip-missing',
-        action='store_true',
-        required=False,
-        help='Skip test cases that are not present in testrun')
-    group.addoption(
-        '--tr-milestone-id',
-        action='store',
-        default=None,
-        required=False,
-        help='Identifier of milestone, to be used in run creation (config file: milestone_id in TESTRUN section)'
+        default=Messages.TR_TEST_PLAN_DESCRIPTION_DEFAULT,
+        help=Messages.TR_TEST_PLAN_DESCRIPTION
     )
-    group.addoption(
-        '--tc-custom-comment',
-        action='store',
-        default=None,
-        required=False,
-        help='Custom comment, to be appended to default comment for test case \
-              (config file: custom_comment in TESTCASE section)'
+    parser.addini(
+        'tr-testplan-description',
+        help=Messages.TR_TEST_PLAN_DESCRIPTION,
+        default=Messages.TR_TEST_PLAN_DESCRIPTION_DEFAULT
     )
 
+    group.addoption('--tr-version', action='store', default='', required=False, help=Messages.TR_VERSION)
+    parser.addini('tr-version', help=Messages.TR_VERSION, default='')
+
+    group.addoption('--tr-no-ssl-cert-check', action='store_false', default=None, help=Messages.TR_NO_SSL_CHECK)
+    parser.addini('tr-no-ssl-cert-check', help=Messages.TR_NO_SSL_CHECK, default='')
+
+    group.addoption(
+        '--tr-close-on-complete', action='store_true', default=False, required=False, help=Messages.TR_CLOSE_ON_COMPLETE
+    )
+    parser.addini('tr-close-on-complete', help=Messages.TR_CLOSE_ON_COMPLETE, default=False)
+
+    group.addoption(
+        '--tr-dont-publish-blocked', action='store_false', required=False, help=Messages.TR_DONT_PUBLISH_BLOCKED
+    )
+    parser.addini('tr-dont-publish-blocked', help=Messages.TR_DONT_PUBLISH_BLOCKED, default=None)
+
+    group.addoption('--tr-skip-missing', action='store_true', required=False, help=Messages.TR_SKIP_MISSING)
+    parser.addini('tr-skip-missing', help=Messages.TR_SKIP_MISSING, default=None)
+
+    group.addoption('--tr-milestone-id', action='store', default=None, required=False, help=Messages.TR_MILESTONE_ID)
+    parser.addini('tr-milestone-id', help=Messages.TR_MILESTONE_ID, default=None)
+
+    group.addoption(
+        '--tc-custom-comment', action='store', default=None, required=False, help=Messages.TC_CUSTOM_COMMENT
+    )
+    parser.addini('tc-custom-comment', help=Messages.TC_CUSTOM_COMMENT, default=None)
 
 def pytest_configure(config):
     # Registration marks
@@ -199,8 +193,8 @@ class ConfigManager(object):
     def getoption(self, flag, cfg_name, section=None, is_bool=False, default=None):
         # priority: cli > config file > default
 
-        # 1. return cli option (if set)
-        value = self.config.getoption('--{}'.format(flag))
+        # 1. return cli option or pytest.ini option (if set)
+        value = self.config.getoption('--{}'.format(flag)) or self.config.getini(flag)
         if value is not None:
             return value
 
