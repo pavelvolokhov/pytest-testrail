@@ -194,7 +194,7 @@ class ConfigManager(object):
         # priority: cli > config file > default
 
         # 1. return cli option or pytest.ini option (if set)
-        value = self.config.getoption('--{}'.format(flag)) or self.config.getini(flag)
+        value = self.config.getoption('--{}'.format(flag)) or self.config.getini(flag) or os.environ.get(flag)
         if value is not None:
             return value
 
