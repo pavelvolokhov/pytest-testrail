@@ -11,14 +11,9 @@
 # Copyright Gurock Software GmbH. See license.md for details.
 #
 
-import sys
 import requests
 import time
-
-if sys.version_info.major == 2:
-    from urlparse import urljoin
-else:
-    from urllib.parse import urljoin
+from urllib.parse import urljoin
 
 
 class APIClient:

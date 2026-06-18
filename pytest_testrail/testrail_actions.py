@@ -44,11 +44,6 @@ class TestrailActions:
         :param testrun_id: Id of the testrun to feed
 
         """
-        # unicode converter for compatibility of python 2 and 3
-        try:
-            converter = unicode
-        except NameError:
-            converter = lambda s, c: str(bytes(s, "utf-8"), c)
         # Results are sorted by 'case_id' and by 'status_id' (worst result at the end)
         # Comment sort by status_id due to issue with pytest-rerun failures,
         # for details refer to issue https://github.com/allankp/pytest-testrail/issues/100
@@ -91,8 +86,7 @@ class TestrailActions:
                 # Indent text to avoid string formatting by TestRail. Limit size of comment.
                 entry['comment'] += u"# Pytest result: #\n"
                 entry['comment'] += u'Log truncated\n...\n' if len(str(comment)) > COMMENT_SIZE_LIMIT else u''
-                entry['comment'] += u"    " + converter(str(comment), "utf-8")[-COMMENT_SIZE_LIMIT:].replace('\n',
-                                                                                                             '\n    ')  # noqa
+                entry['comment'] += u"    " + str(comment)[-COMMENT_SIZE_LIMIT:].replace('\n', '\n    ')  # noqa
             if self.testrail_data.custom_comment:
                 entry['comment'] += self.testrail_data.custom_comment + '\n'
             duration = result.get('duration')
