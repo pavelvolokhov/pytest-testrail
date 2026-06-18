@@ -4,7 +4,7 @@ import pytest
 from pytest_testrail.TestrailModel import TestRailModel
 from pytest_testrail.testrail_actions import TestrailActions
 from pytest_testrail.vars import TESTRAIL_DEFECTS_PREFIX, TESTRAIL_PREFIX
-from pytest_testrail.functions import get_testrail_keys, testrun_name, clean_test_ids, \
+from pytest_testrail.functions import testrail, pytestrail, get_testrail_keys, testrun_name, clean_test_ids, \
     get_test_outcome, clean_test_defects, is_xdist_worker, get_testrail_suite_ids, get_suite_by_case
 
 
@@ -44,6 +44,39 @@ class PyTestRailPlugin(TestrailActions):
                                            )
         super().__init__(testrail_data=self.testrail_data)
         self.is_use_xdist = False
+
+    # Property proxies for backward compatibility and test access
+    @property
+    def results(self):
+        return self.testrail_data.results
+
+    @results.setter
+    def results(self, value):
+        self.testrail_data.results = value
+
+    @property
+    def testrun_id(self):
+        return self.testrail_data.testrun_id
+
+    @testrun_id.setter
+    def testrun_id(self, value):
+        self.testrail_data.testrun_id = value
+
+    @property
+    def testplan_id(self):
+        return self.testrail_data.testplan_id
+
+    @testplan_id.setter
+    def testplan_id(self, value):
+        self.testrail_data.testplan_id = value
+
+    @property
+    def close_on_complete(self):
+        return self.testrail_data.close_on_complete
+
+    @close_on_complete.setter
+    def close_on_complete(self, value):
+        self.testrail_data.close_on_complete = value
 
     @pytest.fixture(scope='function')
     def testrail_comment(self, request):
@@ -182,7 +215,7 @@ class PyTestRailPlugin(TestrailActions):
 
         if self.testrail_data.skip_missing:
             for item, case_id in items_with_tr_keys:
-                if set(case_id).intersection(set(self.testrail_data.diff_case_ids)):
+                if set(case_id).issubset(set(self.testrail_data.diff_case_ids)):
                     mark = pytest.mark.skip(f'[{TESTRAIL_PREFIX}] Test {case_id} is not present in testrun.')
                     item.add_marker(mark)
 
