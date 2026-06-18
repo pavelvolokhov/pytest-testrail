@@ -1,10 +1,11 @@
 # -*- coding: UTF-8 -*-
+import json
 import pytest
 
 from pytest_testrail.TestrailModel import TestRailModel
 from pytest_testrail.testrail_actions import TestrailActions
 from pytest_testrail.vars import TESTRAIL_DEFECTS_PREFIX, TESTRAIL_PREFIX
-from pytest_testrail.functions import testrail, pytestrail, get_testrail_keys, testrun_name, clean_test_ids, \
+from pytest_testrail.functions import get_testrail_keys, testrun_name, clean_test_ids, \
     get_test_outcome, clean_test_defects, is_xdist_worker, get_testrail_suite_ids, get_suite_by_case
 
 
@@ -43,7 +44,6 @@ class PyTestRailPlugin(TestrailActions):
                                            test_comments=[]
                                            )
         super().__init__(testrail_data=self.testrail_data)
-        self.is_use_xdist = False
 
     # Property proxies for backward compatibility and test access
     @property
@@ -231,7 +231,7 @@ class PyTestRailPlugin(TestrailActions):
         test_comments: list = []
 
         if 'callspec' in dir(item):
-            test_parametrize = item.callspec.params
+            test_parametrize = str(item.callspec.params)
 
         if hasattr(rep, 'sections'):
             for section in rep.sections:
@@ -269,6 +269,10 @@ class PyTestRailPlugin(TestrailActions):
     def pytest_sessionstart(self, session):
         if is_xdist_worker(config=session.config):
             self.testrail_data.testrun_id = session.config.workerinput["test_run_id"]
+            raw = session.config.workerinput.get("actual_suites_with_case_ids", "{}")
+            self.testrail_data.actual_suites_with_case_ids = {
+                int(k): v for k, v in json.loads(raw).items()
+            }
         else:
             if not self.testrail_data.testrun_id and not self.testrail_data.testplan_id \
                     and self.testrail_data.testplan_name:
@@ -278,14 +282,13 @@ class PyTestRailPlugin(TestrailActions):
     def pytest_sessionfinish(self, session, exitstatus):
         """ Publish results in TestRail """
         yield
-        if session.config.pluginmanager.get_plugin("xdist"):
-            if is_xdist_worker(config=session.config):
-                self.is_use_xdist = True
-                self.publish_results(testrail_data=self.testrail_data, results=self.testrail_data.results)
-            if not self.is_use_xdist and not session.config.getoption("numprocesses"):
-                self.publish_results(testrail_data=self.testrail_data, results=self.testrail_data.results)
-        else:
-            self.publish_results(testrail_data=self.testrail_data, results=self.testrail_data.results)
+        if is_xdist_worker(config=session.config):
+            # Workers send their results to the controller via workeroutput.
+            # Publishing is done only by the controller.
+            session.config.workeroutput['testrail_results'] = self.testrail_data.results
+            return
+        # Controller or non-xdist run: publish all collected results once.
+        self.publish_results(testrail_data=self.testrail_data, results=self.testrail_data.results)
 
     def pytest_configure(self, config):
         if config.pluginmanager.hasplugin("xdist"):
@@ -300,3 +303,11 @@ class NodeAction(TestrailActions):
 
     def pytest_configure_node(self, node):  # type: ignore
         node.workerinput["test_run_id"] = self.testrail_data.testrun_id
+        node.workerinput["actual_suites_with_case_ids"] = json.dumps(
+            {str(k): v for k, v in self.testrail_data.actual_suites_with_case_ids.items()}
+        )
+
+    def pytest_testnodedown(self, node, error):  # type: ignore
+        """Collect results from each worker after it finishes."""
+        worker_results = node.workeroutput.get('testrail_results', [])
+        self.testrail_data.results.extend(worker_results)
