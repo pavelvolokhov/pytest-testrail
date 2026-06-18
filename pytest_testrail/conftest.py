@@ -220,9 +220,9 @@ def pytest_configure(config):
         cfg_file_path = config.getoption("--tr-config")
         config_manager = ConfigManager(cfg_file_path, config)
         client = APIClient(
-            config_manager.getoption("tr-url", "url", "API"),
-            config_manager.getoption("tr-email", "email", "API"),
-            config_manager.getoption("tr-password", "password", "API"),
+            str(config_manager.getoption("tr-url", "url", "API") or ""),
+            str(config_manager.getoption("tr-email", "email", "API") or ""),
+            str(config_manager.getoption("tr-password", "password", "API") or ""),
             timeout=config_manager.getoption("tr-timeout", "timeout", "API"),
         )
 
@@ -258,8 +258,11 @@ def pytest_configure(config):
                     default=True,
                 ),
                 tr_name=config_manager.getoption("tr-testrun-name", "name", "TESTRUN"),
-                tr_description=config_manager.getoption(
-                    "tr-testrun-description", "description", "TESTRUN"
+                tr_description=str(
+                    config_manager.getoption(
+                        "tr-testrun-description", "description", "TESTRUN"
+                    )
+                    or ""
                 ),
                 testplan_name=config_manager.getoption(
                     "tr-testplan-name", "name", "TESTRUN"
@@ -268,7 +271,9 @@ def pytest_configure(config):
                     "tr-testplan-description", "description", "TESTRUN"
                 ),
                 run_id=config.getoption("--tr-run-id"),
-                plan_id=config_manager.getoption("tr-plan-id", "plan_id", "TESTRUN"),
+                plan_id=int(
+                    config_manager.getoption("tr-plan-id", "plan_id", "TESTRUN") or 0
+                ),
                 version=config.getoption("--tr-version"),
                 close_on_complete=config.getoption("--tr-close-on-complete"),
                 publish_blocked=config.getoption("--tr-dont-publish-blocked"),

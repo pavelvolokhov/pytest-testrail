@@ -17,7 +17,7 @@ from urllib.parse import urljoin
 
 
 class APIClient:
-    def __init__(self, base_url, user, password, **kwargs):
+    def __init__(self, base_url: str, user: str, password: str, **kwargs):
         """
         Instantiate the APIClient class.
 

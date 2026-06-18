@@ -67,6 +67,7 @@ class PyTestRailPlugin(TestrailActions):
             user_password=user_password,
             tr_url=tr_url,
             actual_suites_with_case_ids={},
+            available_suite_ids={},
             plan_entry_storage={},
             diff_case_ids=[],
             test_comments=[],
@@ -121,7 +122,7 @@ class PyTestRailPlugin(TestrailActions):
             self.testrail_data.project_id,
             self.testrail_data.testplan_name,
             self.testrail_data.milestone_id,
-            self.testrail_data.testplan_description,
+            self.testrail_data.testplan_description or "",
         )
 
     def _create_test_plan_entry(self, suite_id=None, test_suite_name=""):
@@ -134,7 +135,7 @@ class PyTestRailPlugin(TestrailActions):
             tr_keys=self.testrail_data.actual_suites_with_case_ids[
                 suite_id if suite_id else self.testrail_data.suite_id
             ],
-            description=self.testrail_data.testrun_description,
+            description=self.testrail_data.testrun_description or "",
         )
 
     def _create_test_run(self, suite_id=None, test_suite_name=""):
@@ -148,7 +149,7 @@ class PyTestRailPlugin(TestrailActions):
                 suite_id if suite_id else self.testrail_data.suite_id
             ],
             milestone_id=self.testrail_data.milestone_id,
-            description=self.testrail_data.testrun_description,
+            description=self.testrail_data.testrun_description or "",
         )
 
     def create_report_entries(self):
@@ -190,14 +191,14 @@ class PyTestRailPlugin(TestrailActions):
                     self._create_test_plan_entry(
                         suite_id=suite_id,
                         test_suite_name=self.testrail_data.available_suite_ids.get(
-                            suite_id
+                            suite_id, ""
                         ),
                     )
                 else:
                     self._create_test_run(
                         suite_id=suite_id,
                         test_suite_name=self.testrail_data.available_suite_ids.get(
-                            suite_id
+                            suite_id, ""
                         ),
                     )
 
@@ -224,12 +225,9 @@ class PyTestRailPlugin(TestrailActions):
 
         # ---------------------------------------------
         testrail_list_of_suites_and_cases = {}
-        self.testrail_data.available_suite_ids = self.get_suites(
-            project_id=self.testrail_data.project_id
-        )
+        raw_suites = self.get_suites(project_id=self.testrail_data.project_id)
         self.testrail_data.available_suite_ids = {
-            suite["id"]: suite["name"]
-            for suite in self.testrail_data.available_suite_ids
+            suite["id"]: suite["name"] for suite in raw_suites
         }
         # got a list of test suites [11234,34234,123213]
         if self.testrail_data.suite_id:
@@ -291,7 +289,10 @@ class PyTestRailPlugin(TestrailActions):
                 f"[{TESTRAIL_PREFIX}] Diff: {self.testrail_data.diff_case_ids}"
             )
 
-        self.create_report_entries()
+        # Only create test runs/plan entries on non-xdist or controller.
+        # Workers just need collection data for get_suite_by_case during execution.
+        if not is_xdist_worker(config=config):
+            self.create_report_entries()
 
         if self.testrail_data.skip_missing:
             for item, case_id in items_with_tr_keys:
@@ -307,7 +308,7 @@ class PyTestRailPlugin(TestrailActions):
         outcome = yield
 
         rep = outcome.get_result()
-        defect_ids = None
+        defect_ids: list | None = None
         test_parametrize = None
         report_messages = []
         test_comments: list = []
@@ -356,7 +357,6 @@ class PyTestRailPlugin(TestrailActions):
                             test_comments=test_comments,
                         )
                     )
-            return None
 
     @pytest.hookimpl(tryfirst=True)
     def pytest_sessionstart(self, session):
@@ -379,26 +379,38 @@ class PyTestRailPlugin(TestrailActions):
         """Publish results in TestRail"""
         yield
         if is_xdist_worker(config=session.config):
-            # Workers send their results to the controller via workeroutput.
+            # Workers send their results and collection data to the controller.
             # Publishing is done only by the controller.
             session.config.workeroutput["testrail_results"] = self.testrail_data.results
+            session.config.workeroutput["actual_suites_with_case_ids"] = json.dumps(
+                {
+                    str(k): v
+                    for k, v in self.testrail_data.actual_suites_with_case_ids.items()
+                }
+            )
+            session.config.workeroutput["available_suite_ids"] = json.dumps(
+                {str(k): v for k, v in self.testrail_data.available_suite_ids.items()}
+            )
             return
         # Controller or non-xdist run: publish all collected results once.
-        self.publish_results(
-            testrail_data=self.testrail_data, results=self.testrail_data.results
-        )
+        self.publish_results(results=self.testrail_data.results)
 
     def pytest_configure(self, config):
-        if config.pluginmanager.hasplugin("xdist"):
-            config.pluginmanager.register(NodeAction(self.testrail_data))
+        if config.pluginmanager.hasplugin("xdist") and not is_xdist_worker(
+            config=config
+        ):
+            config.pluginmanager.register(
+                NodeAction(self.testrail_data), name="pytest-testrail-node-action"
+            )
 
 
 class NodeAction(TestrailActions):
     def __init__(self, testrail_data):
         self.testrail_data = testrail_data
+        self._entries_created = False
         super().__init__(testrail_data=self.testrail_data)
 
-    def pytest_configure_node(self, node):  # type: ignore
+    def pytest_configure_node(self, node):
         node.workerinput["test_run_id"] = self.testrail_data.testrun_id
         node.workerinput["actual_suites_with_case_ids"] = json.dumps(
             {
@@ -407,7 +419,87 @@ class NodeAction(TestrailActions):
             }
         )
 
-    def pytest_testnodedown(self, node, error):  # type: ignore
-        """Collect results from each worker after it finishes."""
+    def _create_report_entries(self):
+        """Create test runs/plan entries on the controller side."""
+        if self.testrail_data.testrun_id:
+            run_info = self.get_run(run_id=self.testrail_data.testrun_id)
+            if run_info["plan_id"]:
+                entry_id = self.get_testplan_entry_id(
+                    plan_id=run_info["plan_id"], run_id=self.testrail_data.testrun_id
+                )
+                self.update_testplan_entry(
+                    plan_id=run_info["plan_id"],
+                    entry_id=entry_id,
+                    run_id=self.testrail_data.testrun_id,
+                    tr_keys=self.testrail_data.actual_suites_with_case_ids[
+                        run_info["suite_id"]
+                    ],
+                    suite_id=run_info["suite_id"],
+                    save_previous=True,
+                )
+            else:
+                self.update_testrun(
+                    testrun_id=self.testrail_data.testrun_id,
+                    tr_keys=self.testrail_data.actual_suites_with_case_ids[
+                        run_info["suite_id"]
+                    ],
+                    suite_id=run_info["suite_id"],
+                    save_previous=True,
+                )
+        else:
+            for suite_id in self.testrail_data.actual_suites_with_case_ids.keys():
+                if not self.testrail_data.actual_suites_with_case_ids[suite_id]:
+                    print(
+                        f"[{TESTRAIL_PREFIX}] No testcases for suite {suite_id}! Testrun not created"
+                    )
+                    continue
+                if self.testrail_data.testplan_id:
+                    self.create_plan_entry(
+                        suite_id=suite_id,
+                        testrun_name=f"[ {self.testrail_data.available_suite_ids.get(suite_id, '')} ] "
+                        f"{self.testrail_data.testrun_name or testrun_name()}",
+                        assign_user_id=self.testrail_data.assign_user_id,
+                        plan_id=self.testrail_data.testplan_id,
+                        include_all=self.testrail_data.include_all,
+                        tr_keys=self.testrail_data.actual_suites_with_case_ids[
+                            suite_id
+                        ],
+                        description=self.testrail_data.testrun_description or "",
+                    )
+                else:
+                    self.create_test_run(
+                        assign_user_id=self.testrail_data.assign_user_id,
+                        project_id=self.testrail_data.project_id,
+                        suite_id=suite_id,
+                        include_all=self.testrail_data.include_all,
+                        testrun_name=f"[ {self.testrail_data.available_suite_ids.get(suite_id, '')} ] "
+                        f"{self.testrail_data.testrun_name or testrun_name()}",
+                        tr_keys=self.testrail_data.actual_suites_with_case_ids[
+                            suite_id
+                        ],
+                        milestone_id=self.testrail_data.milestone_id,
+                        description=self.testrail_data.testrun_description or "",
+                    )
+
+    def pytest_testnodedown(self, node, error):
+        """Collect results and collection data from each worker after it finishes."""
         worker_results = node.workeroutput.get("testrail_results", [])
         self.testrail_data.results.extend(worker_results)
+
+        # Merge worker's collection data into controller
+        raw_suites = node.workeroutput.get("actual_suites_with_case_ids", "{}")
+        for k, v in json.loads(raw_suites).items():
+            suite_id = int(k)
+            if suite_id not in self.testrail_data.actual_suites_with_case_ids:
+                self.testrail_data.actual_suites_with_case_ids[suite_id] = v
+
+        raw_available = node.workeroutput.get("available_suite_ids", "{}")
+        for k, v in json.loads(raw_available).items():
+            suite_id = int(k)
+            if suite_id not in self.testrail_data.available_suite_ids:
+                self.testrail_data.available_suite_ids[suite_id] = v
+
+        # Create test run/plan entries once after receiving data from first worker
+        if not self._entries_created and self.testrail_data.actual_suites_with_case_ids:
+            self._create_report_entries()
+            self._entries_created = True
