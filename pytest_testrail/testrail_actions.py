@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import sys
 from collections import defaultdict
 from operator import itemgetter
@@ -34,7 +36,7 @@ class TestrailActions:
         comment: str = "",
         defects=None,
         duration=0,
-        test_parametrize=None,
+        test_parametrize: str | None = None,
         suite_id=0,
         test_comments: list | None = None,
     ):
@@ -44,7 +46,7 @@ class TestrailActions:
         :param suite_id:
         :param test_id:
         :param test_comments: add text from comment fixture
-        :param list test_parametrize: Add test parametrize to test result
+        :param test_parametrize: Add test parametrize to test result
         :param defects: Add defects to test result
         :param int status: status code of test (pass or fail).
         :param comment: None or a failure representation.
@@ -168,9 +170,7 @@ class TestrailActions:
                     )
                 )
 
-    def publish_results(
-        self, testrail_data: TestRailModel = None, results: list = None
-    ):
+    def publish_results(self, results: list | None = None):
         print("[{}] Start publishing".format(TESTRAIL_PREFIX))
 
         if results:
@@ -193,22 +193,44 @@ class TestrailActions:
 
             results_by_run = defaultdict(list)
             if self.testrail_data.testrun_id:
-                test_suite = list(self.testrail_data.plan_entry_storage.keys())[0]
-                for result in results:
-                    if str(result["case_id"]) in tests_list:
-                        if int(result["suite_id"]) == int(test_suite):
-                            results_by_run[
-                                self.testrail_data.plan_entry_storage[
-                                    result["suite_id"]
-                                ]["testrun_id"]
-                            ].append(result)
+                if not self.testrail_data.plan_entry_storage:
+                    print(
+                        "[{}] No plan entries found, publishing all results to testrun {}".format(
+                            TESTRAIL_PREFIX, self.testrail_data.testrun_id
+                        )
+                    )
+                    for result in results:
+                        if str(result["case_id"]) in tests_list:
+                            results_by_run[self.testrail_data.testrun_id].append(result)
+                else:
+                    test_suite = list(self.testrail_data.plan_entry_storage.keys())[0]
+                    for result in results:
+                        if str(result["case_id"]) in tests_list:
+                            if int(result["suite_id"]) == int(test_suite):
+                                results_by_run[
+                                    self.testrail_data.plan_entry_storage[
+                                        result["suite_id"]
+                                    ]["testrun_id"]
+                                ].append(result)
                 self._add_results(
                     self.testrail_data.testrun_id,
-                    results_by_run.get(self.testrail_data.testrun_id),
+                    results_by_run.get(self.testrail_data.testrun_id, []),
                 )
             else:
                 for result in results:
                     if str(result["case_id"]) in tests_list:
+                        if (
+                            result["suite_id"]
+                            not in self.testrail_data.plan_entry_storage
+                        ):
+                            print(
+                                "[{}] Suite ID {} not found in plan entries, skipping case {}".format(
+                                    TESTRAIL_PREFIX,
+                                    result["suite_id"],
+                                    result["case_id"],
+                                )
+                            )
+                            continue
                         results_by_run[
                             self.testrail_data.plan_entry_storage[result["suite_id"]][
                                 "testrun_id"
@@ -356,7 +378,7 @@ class TestrailActions:
     def create_plan(self, project_id, plan_name, milestone_id, description=""):
         data = {
             "name": plan_name,
-            "description": description,
+            "description": description or "",
             "milestone_id": milestone_id,
         }
 
@@ -422,7 +444,7 @@ class TestrailActions:
     def update_testplan_entry(
         self,
         plan_id: int,
-        entry_id: str,
+        entry_id: str | None,
         run_id: int,
         tr_keys: list,
         suite_id: int,

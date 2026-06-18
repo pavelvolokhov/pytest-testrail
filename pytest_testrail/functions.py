@@ -2,7 +2,7 @@ import re
 import warnings
 
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from pytest_testrail.vars import (
     PYTEST_TO_TESTRAIL_STATUS,
     DT_FORMAT,
@@ -86,13 +86,13 @@ def get_test_outcome(outcome):
 
 def testrun_name():
     """Returns testrun name with timestamp"""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     return "Automated Run {}".format(now.strftime(DT_FORMAT))
 
 
 def testplan_name():
     """Returns testrun name with timestamp"""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     return "Automated Plan Entry {}".format(now.strftime(DT_FORMAT))
 
 
@@ -111,8 +111,9 @@ def clean_test_ids(test_ids):
     :return list ints: contains list of test_ids as ints.
     """
     return [
-        int(re.search("(?P<test_id>[0-9]+$)", test_id).groupdict().get("test_id"))
+        int(match.group("test_id"))
         for test_id in test_ids
+        if (match := re.search("(?P<test_id>[0-9]+$)", test_id))
     ]
 
 
@@ -124,8 +125,9 @@ def clean_test_defects(defect_ids):
     :return list ints: contains list of defect_ids as ints.
     """
     return [
-        (re.search("(?P<defect_id>.*)", defect_id).groupdict().get("defect_id"))
+        match.group("defect_id")
         for defect_id in defect_ids
+        if (match := re.search("(?P<defect_id>.*)", defect_id))
     ]
 
 
@@ -137,8 +139,9 @@ def clean_suite_ids(suite_ids):
     :return list ints: contains list of suite_ids as ints.
     """
     return [
-        int(re.search("(?P<suite_id>[0-9]+$)", suite_id).groupdict().get("suite_id"))
+        int(match.group("suite_id"))
         for suite_id in suite_ids
+        if (match := re.search("(?P<suite_id>[0-9]+$)", suite_id))
     ]
 
 

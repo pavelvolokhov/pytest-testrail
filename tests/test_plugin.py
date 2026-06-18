@@ -170,7 +170,7 @@ def test_pytest_sessionfinish(api_client, tr_plugin):
     }
     api_client.send_post.return_value = {}
 
-    tr_plugin.publish_results(testrail_data=tr_plugin.testrail_data, results=tr_plugin.testrail_data.results)
+    tr_plugin.publish_results(results=tr_plugin.testrail_data.results)
 
     expected_data = {'results': [
         {
@@ -219,7 +219,7 @@ def test_pytest_sessionfinish_testplan(api_client, tr_plugin):
     }
     api_client.send_post.return_value = {}
 
-    tr_plugin.publish_results(testrail_data=tr_plugin.testrail_data, results=tr_plugin.testrail_data.results)
+    tr_plugin.publish_results(results=tr_plugin.testrail_data.results)
 
     expected_data_59 = {'results': [{
         'case_id': 1234,
@@ -316,7 +316,7 @@ def test_close_test_run(api_client, tr_plugin):
     }
     api_client.send_post.return_value = {}
 
-    tr_plugin.publish_results(testrail_data=tr_plugin.testrail_data, results=tr_plugin.testrail_data.results)
+    tr_plugin.publish_results(results=tr_plugin.testrail_data.results)
 
     api_client.send_post.assert_any_call(vars.CLOSE_TESTRUN_URL.format(10), data={}, cert_check=True)
 
@@ -337,7 +337,7 @@ def test_close_test_plan(api_client, tr_plugin):
     }
     api_client.send_post.return_value = {}
 
-    tr_plugin.publish_results(testrail_data=tr_plugin.testrail_data, results=tr_plugin.testrail_data.results)
+    tr_plugin.publish_results(results=tr_plugin.testrail_data.results)
 
     api_client.send_post.assert_any_call(vars.CLOSE_TESTPLAN_URL.format(100), data={}, cert_check=True)
 
