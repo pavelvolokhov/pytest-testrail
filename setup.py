@@ -7,22 +7,22 @@ def read_file(fname):
 
 
 setup(
-    name='pytest-testrail',
-    description='pytest plugin for creating TestRail runs and adding results',
-    long_description=read_file('README.rst'),
-    version='3.0.7',
-    author='Allan Kilpatrick',
-    author_email='allanklp@gmail.com',
-    url='http://github.com/allankp/pytest-testrail/',
-    python_requires='>=3.6',
+    name="pytest-testrail",
+    description="pytest plugin for creating TestRail runs and adding results",
+    long_description=read_file("README.rst"),
+    version="3.0.7",
+    author="Allan Kilpatrick",
+    author_email="allanklp@gmail.com",
+    url="http://github.com/allankp/pytest-testrail/",
+    python_requires=">=3.6",
     packages=[
-        'pytest_testrail',
+        "pytest_testrail",
     ],
-    package_dir={'pytest_testrail': 'pytest_testrail'},
+    package_dir={"pytest_testrail": "pytest_testrail"},
     install_requires=[
-        'pytest>=3.10',
-        'requests>=2.20.0',
+        "pytest>=3.10",
+        "requests>=2.20.0",
     ],
     include_package_data=True,
-    entry_points={'pytest11': ['pytest-testrail = pytest_testrail.conftest']},
+    entry_points={"pytest11": ["pytest-testrail = pytest_testrail.conftest"]},
 )
