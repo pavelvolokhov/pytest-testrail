@@ -1,15 +1,8 @@
 # -*- coding: UTF-8 -*-
 import os
-import sys
+import configparser
 from .plugin import PyTestRailPlugin
 from .testrail_api import APIClient
-
-if sys.version_info.major == 2:
-    # python2
-    import ConfigParser as configparser
-else:
-    # python3
-    import configparser
 
 
 class Messages:

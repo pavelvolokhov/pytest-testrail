@@ -14,6 +14,7 @@ setup(
     author='Allan Kilpatrick',
     author_email='allanklp@gmail.com',
     url='http://github.com/allankp/pytest-testrail/',
+    python_requires='>=3.6',
     packages=[
         'pytest_testrail',
     ],
