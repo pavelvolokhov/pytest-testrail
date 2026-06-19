@@ -79,6 +79,10 @@ name = My Test Run
 description = This is an example description
 milestone_id = 5
 
+[TESTPLAN]
+name = My Test Plan
+description = This is a test plan description
+
 [TESTCASE]
 custom_comment = This is a custom comment
 ```
@@ -173,8 +177,8 @@ py.test --testrail --tr-plan-id=PPPPPP --tr-run-id=RRRRRR --tr-testrun-suite-id=
 | `--tr-testrun-description`       | Description given to the testrun in TestRail (config file: `description` in `[TESTRUN]` section)                                                     |
 | `--tr-run-id`                    | Identifier of an existing testrun in TestRail. If provided, `--tr-testrun-name` is ignored                                                           |
 | `--tr-plan-id`                   | Identifier of an existing testplan in TestRail (config file: `plan_id` in `[TESTRUN]` section). If provided, `--tr-testrun-name` is ignored           |
-| `--tr-testplan-name`             | Name given to a newly created testplan in TestRail                                                                                                   |
-| `--tr-testplan-description`      | Description given to a newly created testplan in TestRail                                                                                            |
+| `--tr-testplan-name`             | Name given to a newly created testplan in TestRail (config file: `name` in `[TESTPLAN]` section)                                                   |
+| `--tr-testplan-description`      | Description given to a newly created testplan in TestRail (config file: `description` in `[TESTPLAN]` section)                                    |
 | `--tr-version`                   | Indicate a version in the Test Case result                                                                                                           |
 | `--tr-no-ssl-cert-check`         | Do not check for a valid SSL certificate on the TestRail host                                                                                        |
 | `--tr-close-on-complete`         | Close the test plan or test run on completion                                                                                                        |

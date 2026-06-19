@@ -265,10 +265,10 @@ def pytest_configure(config):
                     or ""
                 ),
                 testplan_name=config_manager.getoption(
-                    "tr-testplan-name", "name", "TESTRUN"
+                    "tr-testplan-name", "name", "TESTPLAN"
                 ),
                 testplan_description=config_manager.getoption(
-                    "tr-testplan-description", "description", "TESTRUN"
+                    "tr-testplan-description", "description", "TESTPLAN"
                 ),
                 run_id=config.getoption("--tr-run-id"),
                 plan_id=int(
