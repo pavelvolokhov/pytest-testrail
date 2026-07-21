@@ -1,3 +1,2 @@
 # -*- coding: UTF-8 -*-
-from pytest_testrail.functions import pytestrail, testrail
-
+from pytest_testrail.functions import pytestrail as pytestrail, testrail as testrail

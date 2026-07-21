@@ -2,15 +2,20 @@ import re
 import warnings
 
 import pytest
-from datetime import datetime
-from pytest_testrail.vars import PYTEST_TO_TESTRAIL_STATUS, DT_FORMAT, TESTRAIL_PREFIX, TESTRAIL_SUITES_PREFIX
+from datetime import datetime, timezone
+from pytest_testrail.vars import (
+    PYTEST_TO_TESTRAIL_STATUS,
+    DT_FORMAT,
+    TESTRAIL_PREFIX,
+    TESTRAIL_SUITES_PREFIX,
+)
 
 
 class DeprecatedTestDecorator(DeprecationWarning):
     pass
 
 
-warnings.simplefilter(action='once', category=DeprecatedTestDecorator, lineno=0)
+warnings.simplefilter(action="once", category=DeprecatedTestDecorator, lineno=0)
 
 
 class pytestrail(object):
@@ -44,12 +49,12 @@ class pytestrail(object):
     @staticmethod
     def defect(*defect_ids):
         """
-                Decorator to mark defects with defect ids.
+        Decorator to mark defects with defect ids.
 
-                ie. @pytestrail.defect('PF-513', 'BR-3255')
+        ie. @pytestrail.defect('PF-513', 'BR-3255')
 
-                :return pytest.mark:
-                """
+        :return pytest.mark:
+        """
         return pytest.mark.testrail_defects(defect_ids=defect_ids)
 
 
@@ -61,8 +66,10 @@ def testrail(*ids):
 
     :return pytest.mark:
     """
-    deprecation_msg = ('pytest_testrail: the @testrail decorator is deprecated and will be removed. Please use the '
-                       '@pytestrail.case decorator instead.')
+    deprecation_msg = (
+        "pytest_testrail: the @testrail decorator is deprecated and will be removed. Please use the "
+        "@pytestrail.case decorator instead."
+    )
     warnings.warn(deprecation_msg, DeprecatedTestDecorator)
     return pytestrail.case(*ids)
 
@@ -79,21 +86,21 @@ def get_test_outcome(outcome):
 
 def testrun_name():
     """Returns testrun name with timestamp"""
-    now = datetime.utcnow()
-    return 'Automated Run {}'.format(now.strftime(DT_FORMAT))
+    now = datetime.now(timezone.utc)
+    return "Automated Run {}".format(now.strftime(DT_FORMAT))
 
 
 def testplan_name():
     """Returns testrun name with timestamp"""
-    now = datetime.utcnow()
-    return 'Automated Plan Entry {}'.format(now.strftime(DT_FORMAT))
+    now = datetime.now(timezone.utc)
+    return "Automated Plan Entry {}".format(now.strftime(DT_FORMAT))
 
 
 def is_xdist_worker(config):
     """True if the code running the given pytest.config object is running in a xdist master
     node or not running xdist at all.
     """
-    return hasattr(config, 'workerinput')
+    return hasattr(config, "workerinput")
 
 
 def clean_test_ids(test_ids):
@@ -103,27 +110,39 @@ def clean_test_ids(test_ids):
     :param list test_ids: list of test_ids.
     :return list ints: contains list of test_ids as ints.
     """
-    return [int(re.search('(?P<test_id>[0-9]+$)', test_id).groupdict().get('test_id')) for test_id in test_ids]
+    return [
+        int(match.group("test_id"))
+        for test_id in test_ids
+        if (match := re.search("(?P<test_id>[0-9]+$)", test_id))
+    ]
 
 
 def clean_test_defects(defect_ids):
     """
-        Clean pytest marker containing testrail defects ids.
+    Clean pytest marker containing testrail defects ids.
 
-        :param list defect_ids: list of defect_ids.
-        :return list ints: contains list of defect_ids as ints.
-        """
-    return [(re.search('(?P<defect_id>.*)', defect_id).groupdict().get('defect_id')) for defect_id in defect_ids]
+    :param list defect_ids: list of defect_ids.
+    :return list ints: contains list of defect_ids as ints.
+    """
+    return [
+        match.group("defect_id")
+        for defect_id in defect_ids
+        if (match := re.search("(?P<defect_id>.*)", defect_id))
+    ]
 
 
 def clean_suite_ids(suite_ids):
     """
-        Clean pytest marker containing testrail suite ids.
+    Clean pytest marker containing testrail suite ids.
 
-        :param list suite_ids: list of suite_ids.
-        :return list ints: contains list of suite_ids as ints.
-        """
-    return [int(re.search('(?P<suite_id>[0-9]+$)', suite_id).groupdict().get('suite_id')) for suite_id in suite_ids]
+    :param list suite_ids: list of suite_ids.
+    :return list ints: contains list of suite_ids as ints.
+    """
+    return [
+        int(match.group("suite_id"))
+        for suite_id in suite_ids
+        if (match := re.search("(?P<suite_id>[0-9]+$)", suite_id))
+    ]
 
 
 def get_case_list(tests: list):
@@ -133,7 +152,7 @@ def get_case_list(tests: list):
     """
     testcaseids = []
     for test in tests or []:
-        testcaseids.append(test['case_id'])
+        testcaseids.append(test["case_id"])
     return testcaseids
 
 
@@ -146,8 +165,8 @@ def get_testrail_keys(items):
                 (
                     item,
                     clean_test_ids(
-                        item.get_closest_marker(TESTRAIL_PREFIX).kwargs.get('ids')
-                    )
+                        item.get_closest_marker(TESTRAIL_PREFIX).kwargs.get("ids")
+                    ),
                 )
             )
     return testcaseids
@@ -160,7 +179,11 @@ def get_testrail_suite_ids(items) -> list:
             suite_ids.append(
                 (
                     item,
-                    clean_suite_ids(item.get_closest_marker(TESTRAIL_SUITES_PREFIX).kwargs.get('ids'))
+                    clean_suite_ids(
+                        item.get_closest_marker(TESTRAIL_SUITES_PREFIX).kwargs.get(
+                            "ids"
+                        )
+                    ),
                 )
             )
 
@@ -171,9 +194,9 @@ def filter_publish_results(results, ignore_cases):
     clear_results = []
     test_case_ids_list = []
     for result in results:
-        if int(result['case_id']) not in ignore_cases:
+        if int(result["case_id"]) not in ignore_cases:
             clear_results.append(result)
-            test_case_ids_list.append(str(result['case_id']))
+            test_case_ids_list.append(str(result["case_id"]))
     return clear_results, test_case_ids_list
 
 

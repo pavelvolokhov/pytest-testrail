@@ -1,10 +1,12 @@
 # -*- coding: UTF-8 -*-
+import json
 from datetime import datetime
+from types import SimpleNamespace
 from freezegun import freeze_time
-from mock import call, create_autospec
+from mock import create_autospec, MagicMock
 import pytest
 from pytest_testrail import vars, plugin
-from pytest_testrail.plugin import PyTestRailPlugin
+from pytest_testrail.plugin import PyTestRailPlugin, NodeAction
 from pytest_testrail.testrail_api import APIClient
 from pytest_testrail.vars import TESTRAIL_TEST_STATUS
 
@@ -15,7 +17,7 @@ FAKE_NOW = datetime(2015, 1, 31, 19, 5, 42)
 MILESTONE_ID = 5
 PROJECT_ID = 4
 PYTEST_FILE = """
-    from pytest_testrail.plugin import testrail, pytestrail
+    from pytest_testrail import pytestrail, testrail
     @testrail('C1234', 'C5678')
     def test_func():
         pass
@@ -104,113 +106,88 @@ def test_get_testrail_keys(pytest_test_items, testdir):
 
 def test_add_result(tr_plugin):
     status = TESTRAIL_TEST_STATUS["passed"]
-    tr_plugin.add_result([1, 2], status, comment='ERROR!', duration=3600, defects='PF-456')
+    result = tr_plugin.add_result(1, status, comment='ERROR!', duration=3600, defects='PF-456')
 
-    expected_results = [
-        {
-            'case_id': 1,
-            'status_id': status,
-            'comment': "ERROR!",
-            'duration': 3600,
-            'defects': 'PF-456',
-            'test_parametrize': None
-        },
-        {
-            'case_id': 2,
-            'status_id': status,
-            'comment': "ERROR!",
-            'duration': 3600,
-            'defects': 'PF-456',
-            'test_parametrize': None
-        }
-    ]
-
-    assert tr_plugin.results == expected_results
+    assert result == {
+        'case_id': 1,
+        'status_id': status,
+        'comment': 'ERROR!',
+        'duration': 3600,
+        'defects': 'PF-456',
+        'test_parametrize': None,
+        'suite_id': 0,
+        'test_comments': [],
+    }
 
 
-def test_pytest_runtest_makereport(pytest_test_items, tr_plugin, testdir):
-    # --------------------------------
-    # This part of code is a little tricky: it fakes the execution of pytest_runtest_makereport (generator)
-    # by artificially send a stub object (Outcome)
-    class Outcome:
-        def __init__(self):
-            testdir.makepyfile(PYTEST_FILE)
-            self.result = testdir.runpytest()
-            setattr(self.result, "when", "call")
-            setattr(self.result, "longrepr", "An error")
-            setattr(self.result, "outcome", "failed")
-            self.result.duration = 2
+def test_pytest_runtest_makereport(pytest_test_items, tr_plugin):
+    rep = MagicMock()
+    rep.sections = []
+    rep.when = "call"
+    rep.failed = True
+    rep.longreprtext = "An error"
+    rep.skipped = False
+    rep.duration = 2
+    rep.outcome = "failed"
 
+    class FakeOutcome:
         def get_result(self):
-            return self.result
+            return rep
 
-    outcome = Outcome()
+    tr_plugin.testrail_data.actual_suites_with_case_ids = {SUITE_ID: [1234, 5678]}
+
     f = tr_plugin.pytest_runtest_makereport(pytest_test_items[0], None)
-    f.send(None)
+    next(f)
     try:
-        f.send(outcome)
+        f.send(FakeOutcome())
     except StopIteration:
         pass
-    # --------------------------------
 
-    expected_results = [
-        {
-            'case_id': 1234,
-            'status_id': TESTRAIL_TEST_STATUS["failed"],
-            'comment': "An error",
-            'duration': 2,
-            'defects': None,
-            'test_parametrize': None
-        },
-        {
-            'case_id': 5678,
-            'status_id': TESTRAIL_TEST_STATUS["failed"],
-            'comment': "An error",
-            'duration': 2,
-            'defects': None,
-            'test_parametrize': None
-        }
-    ]
-    assert tr_plugin.results == expected_results
+    results = tr_plugin.testrail_data.results
+    assert len(results) == 2
+    case_ids = {r['case_id'] for r in results}
+    assert case_ids == {1234, 5678}
+    for r in results:
+        assert r['status_id'] == TESTRAIL_TEST_STATUS["failed"]
+        assert r['comment'] == "An error"
+        assert r['duration'] == 2
 
 
 def test_pytest_sessionfinish(api_client, tr_plugin):
-    tr_plugin.results = [
-        {'case_id': 1234, 'status_id': TESTRAIL_TEST_STATUS["failed"], 'duration': 2.6, 'defects':'PF-516'},
-        {
-            'case_id': 5678,
-            'status_id': TESTRAIL_TEST_STATUS["blocked"],
-            'comment': "An error",
-            'duration': 0.1,
-            'defects':None
-        },
-        {
-            'case_id': 1234,
-            'status_id': TESTRAIL_TEST_STATUS["passed"],
-            'duration': 2.6,
-            'defects': ['PF-517', 'PF-113']
-        }
+    tr_plugin.testrail_data.results = [
+        {'case_id': 1234, 'status_id': TESTRAIL_TEST_STATUS["failed"], 'duration': 2.6, 'defects': 'PF-516',
+         'comment': '', 'test_parametrize': None, 'test_comments': [], 'suite_id': SUITE_ID},
+        {'case_id': 5678, 'status_id': TESTRAIL_TEST_STATUS["blocked"], 'comment': "An error",
+         'duration': 0.1, 'defects': None, 'test_parametrize': None, 'test_comments': [], 'suite_id': SUITE_ID},
+        {'case_id': 1234, 'status_id': TESTRAIL_TEST_STATUS["passed"], 'duration': 2.6,
+         'defects': ['PF-517', 'PF-113'], 'comment': '', 'test_parametrize': None, 'test_comments': [],
+         'suite_id': SUITE_ID},
     ]
-    tr_plugin.testrun_id = 10
+    tr_plugin.testrail_data.testrun_id = 10
+    tr_plugin.testrail_data.diff_case_ids = []
+    tr_plugin.testrail_data.plan_entry_storage = {
+        SUITE_ID: {'testrun_id': 10, 'testplan_entry_id': None, 'case_ids': [1234, 5678]}
+    }
+    api_client.send_post.return_value = {}
 
-    tr_plugin.pytest_sessionfinish(None, 0)
+    tr_plugin.publish_results(results=tr_plugin.testrail_data.results)
 
     expected_data = {'results': [
         {
             'case_id': 1234,
             'status_id': TESTRAIL_TEST_STATUS["failed"],
-            'defects':'PF-516',
+            'defects': 'PF-516',
             'version': '1.0.0.0',
             'elapsed': '3s',
-            'comment': CUSTOM_COMMENT
+            'comment': '{}\n'.format(CUSTOM_COMMENT),
         },
         {
             'case_id': 1234,
             'status_id': TESTRAIL_TEST_STATUS["passed"],
-            'defects':['PF-517', 'PF-113'],
+            'defects': ['PF-517', 'PF-113'],
             'version': '1.0.0.0',
             'elapsed': '3s',
-            'comment': CUSTOM_COMMENT
+            'comment': '{}\n'.format(CUSTOM_COMMENT),
         },
         {
             'case_id': 5678,
@@ -218,52 +195,51 @@ def test_pytest_sessionfinish(api_client, tr_plugin):
             'defects': None,
             'version': '1.0.0.0',
             'elapsed': '1s',
-            'comment': u'{}\n# Pytest result: #\n    An error'.format(CUSTOM_COMMENT)}
+            'comment': u'# Pytest result: #\n    An error{}\n'.format(CUSTOM_COMMENT),
+        },
     ]}
 
-    api_client.send_post.assert_any_call(vars.ADD_RESULTS_URL.format(tr_plugin.testrun_id), expected_data,
-                                         cert_check=True)
+    api_client.send_post.assert_any_call(vars.ADD_RESULTS_URL.format(10), expected_data, cert_check=True)
 
 
 def test_pytest_sessionfinish_testplan(api_client, tr_plugin):
-    tr_plugin.results = [
-        {
-            'case_id': 5678,
-            'status_id': TESTRAIL_TEST_STATUS["blocked"],
-            'comment': "An error",
-            'duration': 0.1,
-            'defects':None,
-        },
-        {'case_id': 1234, 'status_id': TESTRAIL_TEST_STATUS["passed"], 'duration': 2.6, 'defects':None}
+    SUITE_ID_2 = 2
+    tr_plugin.testrail_data.results = [
+        {'case_id': 5678, 'status_id': TESTRAIL_TEST_STATUS["blocked"], 'comment': "An error",
+         'duration': 0.1, 'defects': None, 'test_parametrize': None, 'test_comments': [], 'suite_id': SUITE_ID_2},
+        {'case_id': 1234, 'status_id': TESTRAIL_TEST_STATUS["passed"], 'duration': 2.6,
+         'defects': None, 'comment': '', 'test_parametrize': None, 'test_comments': [], 'suite_id': SUITE_ID},
     ]
-    tr_plugin.testplan_id = 100
-    tr_plugin.testrun_id = 0
+    tr_plugin.testrail_data.testrun_id = 0
+    tr_plugin.testrail_data.testplan_id = 100
+    tr_plugin.testrail_data.diff_case_ids = []
+    tr_plugin.testrail_data.plan_entry_storage = {
+        SUITE_ID: {'testrun_id': 59, 'testplan_entry_id': 'ce2f3c8f-9899-47b9-a6da-db59a66fb794', 'case_ids': [1234]},
+        SUITE_ID_2: {'testrun_id': 61, 'testplan_entry_id': '775740ff-1ba3-4313-a9df-3acd9d5ef967', 'case_ids': [5678]},
+    }
+    api_client.send_post.return_value = {}
 
-    api_client.send_get.return_value = TESTPLAN
-    tr_plugin.pytest_sessionfinish(None, 0)
-    expected_data = {'results': [
-        {
-            'case_id': 1234,
-            'status_id': TESTRAIL_TEST_STATUS["passed"],
-            'version': '1.0.0.0',
-            'elapsed': '3s',
-            'defects':None,
-            'comment': CUSTOM_COMMENT
-        },
-        {
-            'case_id': 5678,
-            'status_id': TESTRAIL_TEST_STATUS["blocked"],
-            'version': '1.0.0.0',
-            'elapsed': '1s',
-            'defects':None,
-            'comment': u'{}\n# Pytest result: #\n    An error'.format(CUSTOM_COMMENT)}
-    ]}
-    print(api_client.send_post.call_args_list)
+    tr_plugin.publish_results(results=tr_plugin.testrail_data.results)
 
-    api_client.send_post.assert_any_call(vars.ADD_RESULTS_URL.format(59, 1234),
-                                         expected_data, cert_check=True)
-    api_client.send_post.assert_any_call(vars.ADD_RESULTS_URL.format(61, 5678),
-                                         expected_data, cert_check=True)
+    expected_data_59 = {'results': [{
+        'case_id': 1234,
+        'status_id': TESTRAIL_TEST_STATUS["passed"],
+        'defects': None,
+        'version': '1.0.0.0',
+        'elapsed': '3s',
+        'comment': '{}\n'.format(CUSTOM_COMMENT),
+    }]}
+    expected_data_61 = {'results': [{
+        'case_id': 5678,
+        'status_id': TESTRAIL_TEST_STATUS["blocked"],
+        'defects': None,
+        'version': '1.0.0.0',
+        'elapsed': '1s',
+        'comment': u'# Pytest result: #\n    An error{}\n'.format(CUSTOM_COMMENT),
+    }]}
+
+    api_client.send_post.assert_any_call(vars.ADD_RESULTS_URL.format(59), expected_data_59, cert_check=True)
+    api_client.send_post.assert_any_call(vars.ADD_RESULTS_URL.format(61), expected_data_61, cert_check=True)
 
 
 @pytest.mark.parametrize('include_all', [True, False])
@@ -324,80 +300,82 @@ def test_get_available_testruns(api_client, tr_plugin):
 
 
 def test_close_test_run(api_client, tr_plugin):
-    tr_plugin.results = [
-        {'case_id': 1234, 'status_id': TESTRAIL_TEST_STATUS["failed"], 'duration': 2.6, 'defects':None},
-        {
-            'case_id': 5678,
-            'status_id': TESTRAIL_TEST_STATUS["blocked"],
-            'comment': "An error",
-            'duration': 0.1,
-            'defects':None
-        },
-        {'case_id': 1234, 'status_id': TESTRAIL_TEST_STATUS["passed"], 'duration': 2.6, 'defects':None}
+    tr_plugin.testrail_data.results = [
+        {'case_id': 1234, 'status_id': TESTRAIL_TEST_STATUS["failed"], 'duration': 2.6, 'defects': None,
+         'comment': '', 'test_parametrize': None, 'test_comments': [], 'suite_id': SUITE_ID},
+        {'case_id': 5678, 'status_id': TESTRAIL_TEST_STATUS["blocked"], 'comment': "An error",
+         'duration': 0.1, 'defects': None, 'test_parametrize': None, 'test_comments': [], 'suite_id': SUITE_ID},
+        {'case_id': 1234, 'status_id': TESTRAIL_TEST_STATUS["passed"], 'duration': 2.6, 'defects': None,
+         'comment': '', 'test_parametrize': None, 'test_comments': [], 'suite_id': SUITE_ID},
     ]
-    tr_plugin.testrun_id = 10
-    tr_plugin.close_on_complete = True
-    tr_plugin.pytest_sessionfinish(None, 0)
+    tr_plugin.testrail_data.testrun_id = 10
+    tr_plugin.testrail_data.close_on_complete = True
+    tr_plugin.testrail_data.diff_case_ids = []
+    tr_plugin.testrail_data.plan_entry_storage = {
+        SUITE_ID: {'testrun_id': 10, 'testplan_entry_id': None, 'case_ids': [1234, 5678]}
+    }
+    api_client.send_post.return_value = {}
 
-    expected_uri = vars.CLOSE_TESTRUN_URL.format(tr_plugin.testrun_id)
-    api_client.send_post.call_args_list[1] = call(expected_uri, {}, cert_check=True)
+    tr_plugin.publish_results(results=tr_plugin.testrail_data.results)
+
+    api_client.send_post.assert_any_call(vars.CLOSE_TESTRUN_URL.format(10), data={}, cert_check=True)
 
 
 def test_close_test_plan(api_client, tr_plugin):
-    tr_plugin.results = [
-        {
-            'case_id': 5678,
-            'status_id': TESTRAIL_TEST_STATUS["blocked"],
-            'comment': "An error",
-            'duration': 0.1,
-            'defects':None
-        },
-        {'case_id': 1234, 'status_id': TESTRAIL_TEST_STATUS["passed"], 'duration': 2.6, 'defects':None}
+    tr_plugin.testrail_data.results = [
+        {'case_id': 5678, 'status_id': TESTRAIL_TEST_STATUS["blocked"], 'comment': "An error",
+         'duration': 0.1, 'defects': None, 'test_parametrize': None, 'test_comments': [], 'suite_id': SUITE_ID},
+        {'case_id': 1234, 'status_id': TESTRAIL_TEST_STATUS["passed"], 'duration': 2.6, 'defects': None,
+         'comment': '', 'test_parametrize': None, 'test_comments': [], 'suite_id': SUITE_ID},
     ]
-    tr_plugin.testplan_id = 100
-    tr_plugin.testrun_id = 0
-    tr_plugin.close_on_complete = True
+    tr_plugin.testrail_data.testplan_id = 100
+    tr_plugin.testrail_data.testrun_id = 0
+    tr_plugin.testrail_data.close_on_complete = True
+    tr_plugin.testrail_data.diff_case_ids = []
+    tr_plugin.testrail_data.plan_entry_storage = {
+        SUITE_ID: {'testrun_id': 10, 'testplan_entry_id': None, 'case_ids': [1234, 5678]}
+    }
+    api_client.send_post.return_value = {}
 
-    api_client.send_get.return_value = TESTPLAN
-    tr_plugin.pytest_sessionfinish(None, 0)
+    tr_plugin.publish_results(results=tr_plugin.testrail_data.results)
 
-    expected_uri = vars.CLOSE_TESTPLAN_URL.format(tr_plugin.testplan_id)
-    api_client.send_post.call_args_list[1] = call(expected_uri, {}, cert_check=True)
+    api_client.send_post.assert_any_call(vars.CLOSE_TESTPLAN_URL.format(100), data={}, cert_check=True)
 
 
 def test_dont_publish_blocked(api_client):
-    """ Case: one test is blocked"""
+    """ Case: one test is blocked in TestRail — its result should not be published """
     my_plugin = PyTestRailPlugin(api_client, ASSIGN_USER_ID, PROJECT_ID, SUITE_ID, False, True, TR_NAME,
                                  version='1.0.0.0',
                                  publish_blocked=False
                                  )
 
-    my_plugin.results = [
-        {'case_id': 1234, 'status_id': TESTRAIL_TEST_STATUS["blocked"], 'defects': None},
-        {'case_id': 5678, 'status_id': TESTRAIL_TEST_STATUS["passed"], 'defects': None}
+    results = [
+        {'case_id': 1234, 'status_id': TESTRAIL_TEST_STATUS["blocked"], 'defects': None,
+         'comment': '', 'duration': 0, 'test_parametrize': None, 'test_comments': []},
+        {'case_id': 5678, 'status_id': TESTRAIL_TEST_STATUS["passed"], 'defects': None,
+         'comment': '', 'duration': 0, 'test_parametrize': None, 'test_comments': []},
     ]
-    my_plugin.testrun_id = 10
 
     api_client.send_get.return_value = [
-        {'case_id': 1234, 'status_id': TESTRAIL_TEST_STATUS["blocked"], 'defects':None},
-        {'case_id': 5678, 'status_id': TESTRAIL_TEST_STATUS["passed"], 'defects':None}
+        {'case_id': 1234, 'status_id': TESTRAIL_TEST_STATUS["blocked"]},
+        {'case_id': 5678, 'status_id': TESTRAIL_TEST_STATUS["passed"]},
     ]
+    api_client.send_post.return_value = {}
 
-    my_plugin.pytest_sessionfinish(None, 0)
+    my_plugin._add_results(testrun_id=10, results=results)
 
-    api_client.send_get.assert_called_once_with(vars.GET_TESTS_URL.format(my_plugin.testrun_id),
-                                                cert_check=True)
-    expected_uri = vars.ADD_RESULTS_URL.format(my_plugin.testrun_id)
-    expected_data = {
-        'results': [
-            {
-                'case_id': 1234,
-                'status_id': TESTRAIL_TEST_STATUS["blocked"],
-                'version': '1.0.0.0'
-            }
-        ]}
-    assert len(api_client.send_post.call_args_list) == 1
-    assert api_client.send_post.call_args_list[0] == call(expected_uri, expected_data, cert_check=True)
+    api_client.send_get.assert_called_once_with(vars.GET_TESTS_URL.format(10), cert_check=True)
+
+    # case 1234 is blocked in TR → filtered out; only case 5678 (passed) is published
+    expected_uri = vars.ADD_RESULTS_URL.format(10)
+    expected_data = {'results': [{
+        'case_id': 5678,
+        'status_id': TESTRAIL_TEST_STATUS["passed"],
+        'defects': None,
+        'version': '1.0.0.0',
+        'comment': '',
+    }]}
+    api_client.send_post.assert_called_once_with(expected_uri, expected_data, cert_check=True)
 
 
 def test_skip_missing_only_one_test(api_client, pytest_test_items):
@@ -408,10 +386,13 @@ def test_skip_missing_only_one_test(api_client, pytest_test_items):
                                  publish_blocked=False,
                                  skip_missing=True)
 
-    api_client.send_get.return_value = [
-        {"case_id": 1234}, {"case_id": 5678}
+    api_client.send_get.side_effect = [
+        [{'id': SUITE_ID, 'name': 'Suite 1'}],                           # get_suites
+        [{'id': 1234}, {'id': 5678}],                                     # get_cases
+        {'plan_id': None, 'suite_id': SUITE_ID, 'is_completed': False},   # get_run
+        [],                                                                # get_tests (update_testrun)
     ]
-    my_plugin.is_testrun_available = lambda: True
+    api_client.send_post.return_value = {'id': 10}
 
     my_plugin.pytest_collection_modifyitems(None, None, pytest_test_items)
 
@@ -427,10 +408,14 @@ def test_skip_missing_correlation_tests(api_client, pytest_test_items):
                                  publish_blocked=False,
                                  skip_missing=True)
 
-    api_client.send_get.return_value = [
-        {"case_id": 1234}, {"case_id": 8765}
+    # Each test function has one case in TR and one not — neither should be skipped
+    api_client.send_get.side_effect = [
+        [{'id': SUITE_ID, 'name': 'Suite 1'}],                           # get_suites
+        [{'id': 1234}, {'id': 8765}],                                     # get_cases: one from each test
+        {'plan_id': None, 'suite_id': SUITE_ID, 'is_completed': False},   # get_run
+        [],                                                                # get_tests (update_testrun)
     ]
-    my_plugin.is_testrun_available = lambda: True
+    api_client.send_post.return_value = {'id': 10}
 
     my_plugin.pytest_collection_modifyitems(None, None, pytest_test_items)
 
@@ -458,3 +443,166 @@ def test_api_client_timeout(api_client):
 
     api_client.send_post('/timeout', data={"body": "body"}, timeout=None)
     api_client.send_post.assert_called_with('/timeout', data={"body": "body"}, timeout=None)
+
+
+# ──────────────────────────── xdist tests ────────────────────────────
+
+def _drive_sessionfinish_hook(tr_plugin, session):
+    """Drive the pytest_sessionfinish hookwrapper generator to completion."""
+    gen = tr_plugin.pytest_sessionfinish(session, 0)
+    next(gen)
+    try:
+        gen.send(None)
+    except StopIteration:
+        pass
+
+
+def test_xdist_worker_saves_results_to_workeroutput(tr_plugin):
+    """xdist worker must store results in workeroutput, not call publish_results."""
+    worker_results = [
+        {'case_id': 1234, 'status_id': TESTRAIL_TEST_STATUS["passed"], 'suite_id': SUITE_ID,
+         'comment': '', 'duration': 1, 'defects': None, 'test_parametrize': None, 'test_comments': []},
+    ]
+    tr_plugin.testrail_data.results = worker_results
+
+    session = MagicMock()
+    # Presence of workerinput marks this as an xdist worker
+    session.config.workerinput = {}
+    session.config.workeroutput = {}
+
+    _drive_sessionfinish_hook(tr_plugin, session)
+
+    assert session.config.workeroutput['testrail_results'] == worker_results
+    # publish_results makes API calls; none should happen on a worker
+    tr_plugin.testrail_data.client.send_post.assert_not_called()
+
+
+def test_xdist_controller_publishes_results(api_client, tr_plugin):
+    """xdist controller (no workerinput) must publish all collected results."""
+    tr_plugin.testrail_data.results = [
+        {'case_id': 1234, 'status_id': TESTRAIL_TEST_STATUS["passed"], 'suite_id': SUITE_ID,
+         'comment': '', 'duration': 1, 'defects': None, 'test_parametrize': None, 'test_comments': []},
+    ]
+    tr_plugin.testrail_data.testrun_id = 10
+    tr_plugin.testrail_data.diff_case_ids = []
+    tr_plugin.testrail_data.plan_entry_storage = {
+        SUITE_ID: {'testrun_id': 10, 'testplan_entry_id': None, 'case_ids': [1234]}
+    }
+    api_client.send_post.return_value = {}
+
+    # Controller: config has NO workerinput attribute
+    config = SimpleNamespace()
+    session = MagicMock()
+    session.config = config
+
+    _drive_sessionfinish_hook(tr_plugin, session)
+
+    api_client.send_post.assert_called_once_with(
+        vars.ADD_RESULTS_URL.format(10),
+        {'results': [{
+            'case_id': 1234,
+            'status_id': TESTRAIL_TEST_STATUS["passed"],
+            'defects': None,
+            'version': '1.0.0.0',
+            'elapsed': '1s',
+            'comment': '{}\n'.format(CUSTOM_COMMENT),
+        }]},
+        cert_check=True,
+    )
+
+
+def test_xdist_node_action_configure_node(tr_plugin):
+    """NodeAction must pass testrun_id and actual_suites_with_case_ids to workers."""
+    tr_plugin.testrail_data.testrun_id = 42
+    tr_plugin.testrail_data.actual_suites_with_case_ids = {SUITE_ID: [1234, 5678]}
+
+    node_action = NodeAction(tr_plugin.testrail_data)
+    node = MagicMock()
+    node.workerinput = {}
+
+    node_action.pytest_configure_node(node)
+
+    assert node.workerinput['test_run_id'] == 42
+    suites = json.loads(node.workerinput['actual_suites_with_case_ids'])
+    assert suites == {str(SUITE_ID): [1234, 5678]}
+
+
+def test_xdist_node_action_collects_worker_results(tr_plugin):
+    """pytest_testnodedown must aggregate results from each finished worker."""
+    node_action = NodeAction(tr_plugin.testrail_data)
+
+    worker1_results = [
+        {'case_id': 1234, 'status_id': TESTRAIL_TEST_STATUS["passed"], 'suite_id': SUITE_ID},
+    ]
+    worker2_results = [
+        {'case_id': 5678, 'status_id': TESTRAIL_TEST_STATUS["failed"], 'suite_id': SUITE_ID},
+    ]
+
+    node1, node2 = MagicMock(), MagicMock()
+    node1.workeroutput = {'testrail_results': worker1_results}
+    node2.workeroutput = {'testrail_results': worker2_results}
+
+    node_action.pytest_testnodedown(node1, None)
+    node_action.pytest_testnodedown(node2, None)
+
+    assert tr_plugin.testrail_data.results == worker1_results + worker2_results
+
+
+def test_xdist_worker_sessionstart_loads_suites(tr_plugin):
+    """xdist worker must load actual_suites_with_case_ids from workerinput."""
+    suites = {SUITE_ID: [1234, 5678]}
+
+    session = MagicMock()
+    session.config.workerinput = {
+        'test_run_id': 99,
+        'actual_suites_with_case_ids': json.dumps({str(k): v for k, v in suites.items()}),
+    }
+
+    tr_plugin.pytest_sessionstart(session)
+
+    assert tr_plugin.testrail_data.testrun_id == 99
+    assert tr_plugin.testrail_data.actual_suites_with_case_ids == suites
+
+
+def test_xdist_full_flow_publishes_once(api_client, tr_plugin):
+    """Full xdist flow: two workers finish → results aggregated → published once."""
+    node_action = NodeAction(tr_plugin.testrail_data)
+
+    worker1_results = [
+        {'case_id': 1234, 'status_id': TESTRAIL_TEST_STATUS["passed"], 'suite_id': SUITE_ID,
+         'comment': '', 'duration': 1, 'defects': None, 'test_parametrize': None, 'test_comments': []},
+    ]
+    worker2_results = [
+        {'case_id': 5678, 'status_id': TESTRAIL_TEST_STATUS["failed"], 'suite_id': SUITE_ID,
+         'comment': 'err', 'duration': 2, 'defects': None, 'test_parametrize': None, 'test_comments': []},
+    ]
+
+    node1, node2 = MagicMock(), MagicMock()
+    node1.workeroutput = {'testrail_results': worker1_results}
+    node2.workeroutput = {'testrail_results': worker2_results}
+
+    # Workers finish → NodeAction collects their results
+    node_action.pytest_testnodedown(node1, None)
+    node_action.pytest_testnodedown(node2, None)
+
+    assert len(tr_plugin.testrail_data.results) == 2
+
+    # Controller publishes once
+    tr_plugin.testrail_data.testrun_id = 10
+    tr_plugin.testrail_data.diff_case_ids = []
+    tr_plugin.testrail_data.plan_entry_storage = {
+        SUITE_ID: {'testrun_id': 10, 'testplan_entry_id': None, 'case_ids': [1234, 5678]}
+    }
+    api_client.send_post.return_value = {}
+
+    config = SimpleNamespace()
+    session = MagicMock()
+    session.config = config
+
+    _drive_sessionfinish_hook(tr_plugin, session)
+
+    # publish_results must be called exactly once (one API call for this chunk)
+    assert api_client.send_post.call_count == 1
+    call_args = api_client.send_post.call_args
+    published_case_ids = {r['case_id'] for r in call_args[0][1]['results']}
+    assert published_case_ids == {1234, 5678}
